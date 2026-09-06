@@ -16,11 +16,31 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 st.set_page_config(page_title=".mat → NumPy", layout="centered")
 st.title(".mat → NumPy Converter")
+st.caption(
+    "Part of the rs-software toolkit — converts a MATLAB/Octave `.mat` choice file "
+    "into a NumPy format, so the same data can be used in Python without MATLAB."
+)
+
+with st.expander("New here? What is this, and what file do I need?", expanded=False):
+    st.markdown(
+        "This lab's data comes out of MATLAB/Octave as `.mat` files. To work with that data "
+        "in Python (e.g. with our other conversion/analysis tools), you need it in a "
+        "NumPy-friendly format first — that's what this tool does. It doesn't change any "
+        "values, just repackages the same data.\n\n"
+        "**What file do I need?** A **choices** file — raw pairwise judgments (someone "
+        "picking which of two stimuli looked more similar to a reference). Filenames often "
+        "look like `..._choices_..._sess01_10.mat`. If your file is the *output* of a model "
+        "fit (coordinates, not raw judgments), this tool isn't the right one for it."
+    )
+
 st.markdown(
     "Convert a `.mat` triadic choice file to a 5-column NumPy array."
 )
 st.info(
-    "**Output columns:** `ref, s1, s2, N(s1 chosen), N_repeats` (1-indexed)"
+    "**Output columns:** `ref, s1, s2, N(s1 chosen), N_repeats` (1-indexed)\n\n"
+    "**Example row:** `[3, 7, 12, 8, 10]` reads as: with stimulus 3 as reference, "
+    "out of 10 trials comparing stimulus 7 vs. stimulus 12, stimulus 7 was picked "
+    "as more similar to the reference 8 times."
 )
 
 conv_file = st.file_uploader("Upload .mat choices file", type=["mat"])

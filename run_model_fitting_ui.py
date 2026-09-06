@@ -17,7 +17,7 @@ import streamlit as st
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rs-software')
                 if 'rs-software' not in os.getcwd() else '.')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from rs_ui import convergence_plot
+from rs_ui import convergence_plot, slider_with_number
 from rng_control import initialize_random_state
 
 from src.rs_py.utils.util import load_choices
@@ -136,13 +136,8 @@ st.sidebar.subheader("Settings")
 use_defaults = st.sidebar.checkbox("Use all defaults", value=False)
 
 # Dimension range
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    min_dim = st.number_input("Min dim", min_value=1, max_value=10,
-                               value=DEFAULT_MIN_DIM, disabled=use_defaults)
-with col2:
-    max_dim = st.number_input("Max dim", min_value=1, max_value=10,
-                               value=DEFAULT_MAX_DIM, disabled=use_defaults)
+min_dim = slider_with_number("Min dim", 1, 10, DEFAULT_MIN_DIM, key="min_dim", disabled=use_defaults)
+max_dim = slider_with_number("Max dim", 1, 10, DEFAULT_MAX_DIM, key="max_dim", disabled=use_defaults)
 if use_defaults:
     min_dim, max_dim = DEFAULT_MIN_DIM, DEFAULT_MAX_DIM
 if max_dim < min_dim:
@@ -152,12 +147,10 @@ if max_dim < min_dim:
 model_dimensions = list(range(int(min_dim), int(max_dim) + 1))
 st.sidebar.caption(f"Will fit dimensions: {model_dimensions}")
 
-# Max iterations
-max_iter = st.sidebar.number_input(
-    f"Max iterations (default {DEFAULT_MAX_ITER})",
-    min_value=100, max_value=10000,
-    value=DEFAULT_MAX_ITER, step=100,
-    disabled=use_defaults
+# Max iterations -- min lowered to 10 (from 100) so quick test runs are possible
+max_iter = slider_with_number(
+    f"Max iterations (default {DEFAULT_MAX_ITER})", 10, 20000, DEFAULT_MAX_ITER,
+    step=10, key="max_iter", disabled=use_defaults
 )
 if use_defaults:
     max_iter = DEFAULT_MAX_ITER

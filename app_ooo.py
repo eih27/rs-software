@@ -17,13 +17,34 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 st.set_page_config(page_title="OOO → Triadic", layout="centered")
 st.title("OOO → Triadic Converter")
-st.markdown(
-    "Convert an **odd-one-out** `.mat` file to standard triadic choice format. "
-    "Each OOO judgment generates exactly 2 triadic entries using JV's conversion rule."
+st.caption(
+    "Part of the rs-software toolkit — converts one experiment format into another "
+    "so it can be fed into the same coordinate-fitting tools as everything else."
 )
+
+with st.expander("New here? What's an odd-one-out experiment, and why convert it?", expanded=False):
+    st.markdown(
+        "**Odd-one-out (OOO)** is a judgment task: a subject sees **three** stimuli at once "
+        "and picks the one that looks most different from the other two — the \"odd one out.\" "
+        "This is a different task design from the lab's more common **triadic** task, where a "
+        "subject sees a reference plus two others and picks which of the two is *more similar* "
+        "to the reference.\n\n"
+        "The two tasks produce different data, but they can both be turned into the same "
+        "underlying comparison: \"is A closer to the reference than B?\" This tool does that "
+        "conversion — every odd-one-out judgment actually implies two of these standard "
+        "triadic comparisons, so it gets split into 2 output rows.\n\n"
+        "**Why bother?** So the *rest* of the pipeline (fitting coordinates, running "
+        "verification, etc.) only ever has to understand one data format, regardless of which "
+        "task originally produced the judgments."
+    )
+
 st.info(
     "**Input format:** columns `s1, s2, s3, N(s1 odd), N(s2 odd), N(s3 odd)` (1-indexed)\n\n"
-    "**Output format:** columns `ref, s1, s2, N(s1 chosen), N_repeats` (1-indexed)"
+    "**Output format:** columns `ref, s1, s2, N(s1 chosen), N_repeats` (1-indexed)\n\n"
+    "**Example:** if stimulus 5 was picked as the odd one out (most different) from "
+    "{5, 2, 9} on 6 out of 6 trials, that tells us stimulus 2 and stimulus 9 are the two "
+    "*similar* ones — so this produces two rows: one saying \"with 2 as reference, 9 was "
+    "closer than 5,\" and one saying \"with 9 as reference, 2 was closer than 5.\""
 )
 
 ooo_file = st.file_uploader("Upload OOO .mat file", type=["mat"])

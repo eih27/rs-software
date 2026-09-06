@@ -12,6 +12,45 @@ import plotly.graph_objects as go
 import streamlit as st
 
 
+def slider_with_number(label, min_value, max_value, default, step=1, help=None, key=None, container=None, disabled=False):
+    """
+    Renders a slider + a synced number box + a reset-to-default button, all in
+    one row: dragging the slider updates the number, typing in the number
+    moves the slider. Gives users both quick visual adjustment (slider) and
+    exact value entry (number box, including low values sliders are fiddly
+    for) -- per JV's request that iteration/dimension controls support both.
+    """
+    container = container or st.sidebar
+    key = key or label.lower().replace(' ', '_').replace('(', '').replace(')', '')
+    slider_key, num_key = f"{key}__slider", f"{key}__num"
+
+    if slider_key not in st.session_state:
+        st.session_state[slider_key] = default
+        st.session_state[num_key] = default
+
+    def _from_slider():
+        st.session_state[num_key] = st.session_state[slider_key]
+
+    def _from_num():
+        st.session_state[slider_key] = st.session_state[num_key]
+
+    col_slider, col_num, col_reset = container.columns([3, 1.3, 0.5])
+    with col_slider:
+        st.slider(label, min_value=min_value, max_value=max_value, step=step,
+                  key=slider_key, help=help, on_change=_from_slider, disabled=disabled)
+    with col_num:
+        st.write("")  # spacer to align with the slider's label row
+        st.number_input(" ", min_value=min_value, max_value=max_value, step=step,
+                         key=num_key, on_change=_from_num, label_visibility="collapsed", disabled=disabled)
+    with col_reset:
+        st.write("")
+        if st.button("↺", key=f"{key}__reset", help="Reset to default", disabled=disabled):
+            st.session_state[slider_key] = default
+            st.session_state[num_key] = default
+
+    return st.session_state[slider_key]
+
+
 def mat_file_sidebar(label="File", key_prefix="f", allow_two=False):
     """
     Renders file input widgets in the sidebar (upload or path).
