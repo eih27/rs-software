@@ -54,11 +54,21 @@ elif stim_input_mode == "Upload a text file (one name per line)":
 
 if npy_file is not None:
     try:
-        array = np.load(io.BytesIO(npy_file.read()))
+        # allow_pickle=True: some .npy files (e.g. saved as a tuple with a
+        # stimulus name list alongside the array) need it to load at all.
+        # Safe here since this is a lab-internal tool -- the app already
+        # trusts whatever .mat file a user uploads unconditionally too.
+        array = np.load(io.BytesIO(npy_file.read()), allow_pickle=True)
 
-        if array.ndim != 2 or array.shape[1] != 5:
-            st.error(f"Expected a 2D array with 5 columns (ref, s1, s2, N(s1 chosen), N_repeats). "
-                      f"Got shape {array.shape}.")
+        if array.dtype == object or array.ndim != 2 or array.shape[1] != 5:
+            st.error(
+                f"This doesn't look like the 5-column choices array this tool expects "
+                f"(ref, s1, s2, N(s1 chosen), N_repeats). Got shape {array.shape}, "
+                f"dtype {array.dtype}.\n\n"
+                f"If this file came from a script that saved *both* the array and a "
+                f"stimulus name list together (e.g. `np.save(path, (array, stim_list))`), "
+                f"try re-saving just the array on its own -- `np.save(path, array)`."
+            )
         else:
             n_stim = int(array[:, :3].max())
             st.success(f"Loaded: **{array.shape[0]} trials**, **{n_stim} stimuli** (inferred from max index)")
