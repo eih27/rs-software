@@ -17,7 +17,7 @@ import streamlit as st
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rs-software')
                 if 'rs-software' not in os.getcwd() else '.')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from rs_ui import convergence_plot, slider_with_number
+from rs_ui import convergence_plot, slider_with_number, live_progress
 from rng_control import initialize_random_state
 
 from src.rs_py.utils.util import load_choices
@@ -158,11 +158,12 @@ if use_defaults:
 sigma     = DEFAULT_SIGMA
 tolerance = DEFAULT_TOLERANCE
 
-# Print LL interval
+# Print LL interval -- on (50) by default so the page shows live progress
+# instead of looking frozen during a slow fit, especially on Streamlit Cloud
 print_every = st.sidebar.number_input(
-    "Print LL every N iterations (0 = off)",
+    "Show progress every N iterations (0 = off)",
     min_value=0, max_value=1000,
-    value=0, step=50
+    value=50, step=50
 )
 
 st.sidebar.markdown("---")
@@ -262,16 +263,18 @@ residuals_by_dim = {}
 
 progress_bar = st.progress(0)
 status_text  = st.empty()
+progress_log = st.empty()   # live iteration-by-iteration progress, so the page doesn't look frozen
 
 for i, dim in enumerate(model_dimensions):
     status_text.text(f"Fitting {dim}D model ({i+1}/{len(model_dimensions)})...")
     initialize_random_state(if_frozen)  # reseed right before the random MDS start point is drawn
-    coords, ll, residuals = run_mds_single_dim(
-        responses, repeats, n_stim, dim, sigma, max_iter, tolerance,
-        DEFAULT_LEARNING_RATE, DEFAULT_MINIMIZATION,
-        log_every=print_every if print_every > 0 else 0,
-        label=f"{name} {dim}D"
-    )
+    with live_progress(progress_log):
+        coords, ll, residuals = run_mds_single_dim(
+            responses, repeats, n_stim, dim, sigma, max_iter, tolerance,
+            DEFAULT_LEARNING_RATE, DEFAULT_MINIMIZATION,
+            log_every=print_every if print_every > 0 else 0,
+            label=f"{name} {dim}D"
+        )
     coords_by_dim[dim] = coords
     lls_by_dim[dim]    = -ll / total_triads   # normalized per triad, positive = better
     residuals_by_dim[dim] = residuals
@@ -285,6 +288,7 @@ lls_by_dim['random'] =  ll_random / total_triads
 
 progress_bar.empty()
 status_text.empty()
+progress_log.empty()
 
 # --- results table ---
 st.markdown("#### Results")

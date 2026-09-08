@@ -17,7 +17,7 @@ import streamlit as st
 
 # repo root — works both locally (cd rs-software && streamlit run app.py) and on Streamlit Cloud
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from rs_ui import convergence_plot, slider_with_number
+from rs_ui import convergence_plot, slider_with_number, live_progress
 
 from src.rs_py.utils.util import load_choices
 from src.rs_py.utils.config import CONFIG
@@ -244,12 +244,14 @@ if _c2.button("↺", key="d_lr", help="Reset to default"):
     learning_rate = DEFAULT_LEARNING_RATE
 st.sidebar.caption("ℹ️ Learning rate rarely needs changing. Default of 0.05 is appropriate for most runs.")
 
-# Print convergence interval
+# Print convergence interval -- on (50) by default so the page shows live
+# progress instead of looking frozen during a slow fit, especially on
+# Streamlit Cloud
 _c1, _c2 = st.sidebar.columns([3, 1])
-print_every = _c1.number_input("Print LL every N iters (0 = off)", min_value=0, max_value=10000,
-                                value=0, step=50)
+print_every = _c1.number_input("Show progress every N iters (0 = off)", min_value=0, max_value=10000,
+                                value=50, step=50)
 if _c2.button("↺", key="d_pe", help="Reset to default"):
-    print_every = 0
+    print_every = 50
 
 # Warm start
 show_pooled = st.sidebar.checkbox("Use pooled (A+B) fit as warm start", value=False,
@@ -309,7 +311,7 @@ if st.sidebar.button("Use all defaults", use_container_width=True):
     n_surrogates  = DEFAULT_SURROGATES
     max_iterations = DEFAULT_MAX_ITER
     learning_rate  = DEFAULT_LEARNING_RATE
-    print_every    = 0
+    print_every    = 50
     real_if_frozen = -1
 
 st.sidebar.markdown("---")
@@ -402,9 +404,12 @@ if show_pooled: #if checkbox has been selected (t or f)
             pooled_resp[key] = pooled_resp.get(key, 0) + count
             pooled_rep[key] = pooled_rep.get(key, 0) + pp2[key]
         total_triads_pooled = sum(pooled_rep.values())
-        pooled_coords, pooled_ll, pooled_residuals = run_mds(
-            pooled_resp, pooled_rep, global_stims, dim, max_iterations, learning_rate,
-            log_every=1, label="Pooled", if_frozen=1)
+        pooled_log = st.empty()
+        with live_progress(pooled_log):
+            pooled_coords, pooled_ll, pooled_residuals = run_mds(
+                pooled_resp, pooled_rep, global_stims, dim, max_iterations, learning_rate,
+                log_every=print_every if print_every > 0 else 0, label="Pooled", if_frozen=1)
+        pooled_log.empty()
         start1 = np.array([pooled_coords[idx_map1[i]] for i in range(len(stims1))])
         start2 = np.array([pooled_coords[idx_map2[i]] for i in range(len(stims2))])
         st.success(f"Pooled LL: {-pooled_ll/total_triads_pooled:.4f} — using as warm start for A and B fits")
@@ -413,18 +418,24 @@ if show_pooled: #if checkbox has been selected (t or f)
 st.markdown("#### Real data MDS")
 st.caption("Fitting an MDS coordinate map to each dataset's actual choices. LL (log-likelihood) measures fit quality — closer to 0 is better. Disparity measures how different the two maps are after alignment.")
 prog = st.progress(0, text="Fitting real data...")
+progress_log = st.empty()   # live iteration-by-iteration progress, so the page doesn't look frozen
 
 with st.spinner(f"Running {dim}D MDS on dataset 1..."):
-    real_coords1, real_ll1, residuals1 = run_mds(
-        resp1, rep1, stims1, dim, max_iterations, learning_rate, log_every=1, label=name1,
-        start_points=start1, if_frozen=real_if_frozen)
+    with live_progress(progress_log):
+        real_coords1, real_ll1, residuals1 = run_mds(
+            resp1, rep1, stims1, dim, max_iterations, learning_rate,
+            log_every=print_every if print_every > 0 else 0, label=name1,
+            start_points=start1, if_frozen=real_if_frozen)
 prog.progress(50, text="Dataset 1 done...")
 
 with st.spinner(f"Running {dim}D MDS on dataset 2..."):
-    real_coords2, real_ll2, residuals2 = run_mds(
-        resp2, rep2, stims2, dim, max_iterations, learning_rate, log_every=1, label=name2,
-        start_points=start2, if_frozen=real_if_frozen)
+    with live_progress(progress_log):
+        real_coords2, real_ll2, residuals2 = run_mds(
+            resp2, rep2, stims2, dim, max_iterations, learning_rate,
+            log_every=print_every if print_every > 0 else 0, label=name2,
+            start_points=start2, if_frozen=real_if_frozen)
 prog.progress(100, text="Real data done.")
+progress_log.empty()
 
 real_disparity = compute_disparity(real_coords1, real_coords2, stims1, stims2)
 final_ll1 = -real_ll1 / total_triads1

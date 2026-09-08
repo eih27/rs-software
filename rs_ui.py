@@ -7,9 +7,55 @@ Import in any app:
 
 import os
 import tempfile
+import contextlib
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
+
+
+class _StreamlitStdout:
+    """Captures print() output and streams it into a Streamlit placeholder,
+    keeping only the last `max_lines` lines. See live_progress() below."""
+    def __init__(self, placeholder, max_lines=15):
+        self.placeholder = placeholder
+        self.max_lines = max_lines
+        self.lines = []
+        self._buf = ""
+
+    def write(self, text):
+        self._buf += text
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if line.strip():
+                self.lines.append(line)
+        self.lines = self.lines[-self.max_lines:]
+        self.placeholder.code("\n".join(self.lines) or " ")
+
+    def flush(self):
+        pass
+
+
+@contextlib.contextmanager
+def live_progress(placeholder, max_lines=15):
+    """Show live fitting progress in the actual browser UI, not just server logs.
+
+    The underlying fit function (Suniyya's gradient_descent, in
+    src/rs_py/utils/minimize.py) already print()s progress every `log_every`
+    iterations -- but plain print() on Streamlit Cloud only reaches the server
+    log, never the page the user is looking at. This captures that same
+    output (without touching her code at all) and streams it into a
+    placeholder on the page instead, so long/slow fits show visible progress
+    rather than a frozen-looking screen -- especially important on Streamlit
+    Cloud, which can be slow.
+
+    Usage:
+        progress_log = st.empty()
+        with live_progress(progress_log):
+            run_mds_single_dim(..., log_every=50)
+    """
+    stream = _StreamlitStdout(placeholder, max_lines=max_lines)
+    with contextlib.redirect_stdout(stream):
+        yield
 
 
 def slider_with_number(label, min_value, max_value, default, step=1, help=None, key=None, container=None, disabled=False):
