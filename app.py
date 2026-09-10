@@ -30,7 +30,8 @@ from rng_control import initialize_random_state
 _CFG = CONFIG['inputs']['model_fit']
 DEFAULT_DIM            = 2
 DEFAULT_SURROGATES     = 30
-DEFAULT_MAX_ITER       = _CFG['max_iterations']
+CONFIG_MAX_ITER        = _CFG['max_iterations']   # the "full" value from config (2000)
+DEFAULT_MAX_ITER       = 500   # lowered UI default -- lighter on Streamlit Cloud's free tier
 DEFAULT_LEARNING_RATE  = _CFG['learning_rate']
 
 # ---------------------------------------------------------------------------
@@ -216,8 +217,11 @@ dim = slider_with_number("Dimensions", 1, 10, DEFAULT_DIM, key="d_dim")
 # Number of surrogates
 n_surrogates = slider_with_number("Surrogates (0 = prelim run)", 0, 10000, DEFAULT_SURROGATES, key="d_surr")
 
-# Max iterations -- min lowered to 10 (from 100) so quick test runs are possible
-max_iterations = slider_with_number("Max iterations", 10, 20000, DEFAULT_MAX_ITER, step=10, key="d_iter")
+# Max iterations -- default lowered to 500 (config value is 2000) to stay light
+# on Streamlit Cloud's free tier; min is 10 for quick test runs
+max_iterations = slider_with_number(
+    f"Max iterations (500 for a quick look, {CONFIG_MAX_ITER}+ for a final fit)",
+    10, 20000, DEFAULT_MAX_ITER, step=10, key="d_iter")
 
 # Resampling method
 resample_method = st.sidebar.selectbox(
