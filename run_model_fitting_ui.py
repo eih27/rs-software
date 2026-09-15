@@ -45,7 +45,8 @@ DEFAULT_SIGMA         = DEFAULTS['sigma']
 DEFAULT_MIN_DIM       = 1
 DEFAULT_MAX_DIM       = 5
 CONFIG_MAX_ITER       = DEFAULTS['max_iterations']   # the "full" value from config (2000)
-DEFAULT_MAX_ITER      = 500   # lowered UI default -- lighter on Streamlit Cloud's free tier;
+DEFAULT_MAX_ITER      = 150   # lowered further (was 500) -- 500 still timed out / got OOM-restarted
+                               # on Streamlit Cloud's free tier for real datasets around ~35 stimuli
                               # crank the slider up for a final, higher-quality fit
 DEFAULT_TOLERANCE     = DEFAULTS['tolerance']
 DEFAULT_LEARNING_RATE = DEFAULTS['learning_rate']
@@ -159,10 +160,10 @@ if max_dim < min_dim:
 model_dimensions = list(range(int(min_dim), int(max_dim) + 1))
 st.sidebar.caption(f"Will fit dimensions: {model_dimensions}")
 
-# Max iterations -- default lowered to 500 (config value is 2000) to stay light
-# on Streamlit Cloud's free tier; min is 10 for quick test runs
+# Max iterations -- default lowered to stay light on Streamlit Cloud's free
+# tier; min is 10 for quick test runs
 max_iter = slider_with_number(
-    f"Max iterations (500 for a quick look, {CONFIG_MAX_ITER}+ for a final fit)", 10, 20000, DEFAULT_MAX_ITER,
+    f"Max iterations ({DEFAULT_MAX_ITER} for a quick look, {CONFIG_MAX_ITER}+ for a final fit)", 10, 20000, DEFAULT_MAX_ITER,
     step=10, key="max_iter", disabled=use_defaults
 )
 if use_defaults:

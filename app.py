@@ -40,7 +40,8 @@ _CFG = CONFIG['inputs']['model_fit']
 DEFAULT_DIM            = 2
 DEFAULT_SURROGATES     = 15   # lowered from 30 -- same free-tier CPU reasoning as DEFAULT_MAX_ITER
 CONFIG_MAX_ITER        = _CFG['max_iterations']   # the "full" value from config (2000)
-DEFAULT_MAX_ITER       = 500   # lowered UI default -- lighter on Streamlit Cloud's free tier
+DEFAULT_MAX_ITER       = 150   # lowered further (was 500) -- 500 still timed out / got OOM-restarted
+                                # on Streamlit Cloud's free tier for real datasets around ~35 stimuli
 DEFAULT_LEARNING_RATE  = _CFG['learning_rate']
 
 # ---------------------------------------------------------------------------
@@ -229,7 +230,7 @@ n_surrogates = slider_with_number("Surrogates (0 = prelim run)", 0, 10000, DEFAU
 # Max iterations -- default lowered to 500 (config value is 2000) to stay light
 # on Streamlit Cloud's free tier; min is 10 for quick test runs
 max_iterations = slider_with_number(
-    f"Max iterations (500 for a quick look, {CONFIG_MAX_ITER}+ for a final fit)",
+    f"Max iterations ({DEFAULT_MAX_ITER} for a quick look, {CONFIG_MAX_ITER}+ for a final fit)",
     10, 20000, DEFAULT_MAX_ITER, step=10, key="d_iter")
 
 # Resampling method
