@@ -9,6 +9,15 @@ Run from inside rs-software:
 
 import sys
 import os
+
+# Streamlit Cloud's free tier gives the container ~1 shared CPU core. Numpy's
+# BLAS backend defaults to spawning multiple threads per call, which just
+# fights itself for that one core instead of helping -- pin it to 1 thread
+# before numpy is imported.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+
 import tempfile
 import numpy as np
 import plotly.graph_objects as go
