@@ -29,7 +29,7 @@ from rng_control import initialize_random_state
 # ---------------------------------------------------------------------------
 _CFG = CONFIG['inputs']['model_fit']
 DEFAULT_DIM            = 2
-DEFAULT_SURROGATES     = 30
+DEFAULT_SURROGATES     = 15   # lowered from 30 -- same free-tier CPU reasoning as DEFAULT_MAX_ITER
 CONFIG_MAX_ITER        = _CFG['max_iterations']   # the "full" value from config (2000)
 DEFAULT_MAX_ITER       = 500   # lowered UI default -- lighter on Streamlit Cloud's free tier
 DEFAULT_LEARNING_RATE  = _CFG['learning_rate']
@@ -507,8 +507,12 @@ for seed in range(n_surrogates):
                  surrogate_max_iter, learning_rate, start1, start2, track))
 
 from concurrent.futures import ThreadPoolExecutor
+# max_workers lowered from 8 -- Streamlit Cloud's free tier gives each app
+# ~1 shared CPU core, so 8 parallel CPU-heavy fits were fighting over that
+# one core instead of actually running faster, and triggering the platform's
+# throttling/OOM-restart under load. 2 is much lighter, still parallel.
 with st.spinner(f"Running {n_surrogates} surrogates..."):
-    with ThreadPoolExecutor(max_workers=min(8, len(jobs))) as ex:
+    with ThreadPoolExecutor(max_workers=min(2, len(jobs))) as ex:
         results = list(ex.map(_run_one_surrogate, jobs))
 
 surrogate_disparities = np.array([r[0] for r in results])
