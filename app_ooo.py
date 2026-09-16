@@ -42,7 +42,7 @@ st.info(
     "**Input format:** columns `s1, s2, s3, N(s1 odd), N(s2 odd), N(s3 odd)` (1-indexed)\n\n"
     "**Output format:** columns `ref, s1, s2, N(s1 chosen), N_repeats` (1-indexed)\n\n"
     "**Example:** if stimulus 5 was picked as the odd one out (most different) from "
-    "{5, 2, 9} on 6 out of 6 trials, that tells us stimulus 2 and stimulus 9 are the two "
+    "{5, 2, 9} on 4 out of 7 trials, that tells us stimulus 2 and stimulus 9 are the two "
     "*similar* ones — so this produces two rows: one saying \"with 2 as reference, 9 was "
     "closer than 5,\" and one saying \"with 9 as reference, 2 was closer than 5.\""
 )
