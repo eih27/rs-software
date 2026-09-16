@@ -128,6 +128,11 @@ st.set_page_config(page_title="MDS Fitting", layout="wide")
 
 st.sidebar.title("MDS Fitting")
 st.sidebar.caption("Turn a single participant's raw choice data into a perceptual coordinate map.")
+st.sidebar.warning(
+    "This free web version runs on limited compute — it's meant for small "
+    "datasets and a quick look, not a final fit. For larger datasets or a "
+    "high-precision result, run this locally instead."
+)
 st.sidebar.markdown("---")
 
 # --- file input ---

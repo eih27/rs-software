@@ -199,6 +199,11 @@ st.set_page_config(page_title="Surrogate MDS", layout="wide")
 
 st.sidebar.title("Surrogate MDS")
 st.sidebar.caption("Compare two datasets' perceptual maps and test whether the difference is statistically meaningful.")
+st.sidebar.warning(
+    "This free web version runs on limited compute — it's meant for small "
+    "datasets and a quick look, not a final fit. For larger datasets or a "
+    "high-precision result, run this locally instead."
+)
 st.sidebar.markdown("---")
 
 # --- file input ---
