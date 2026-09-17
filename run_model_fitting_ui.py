@@ -228,6 +228,7 @@ run_btn = st.sidebar.button("Run MDS", type="primary", use_container_width=True)
 # ---------------------------------------------------------------------------
 st.title("MDS Fitting: Choice → Coordinates")
 st.caption("Construct coordinates of a representational space from choice data.")
+st.caption("Works on both triadic and tetradic choice files — the type is detected automatically.")
 
 # readiness check
 if input_mode == "Upload file":
