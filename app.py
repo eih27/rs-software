@@ -301,15 +301,15 @@ else:
 st.sidebar.markdown("**Random seed** (real data fit)")
 _c1, _c2 = st.sidebar.columns([3, 1])
 seed_mode = _c1.radio(
-    "Starting position", ["Random each run", "Same every run (reproducible)", "Custom offset"],
+    "Starting position", ["Random each run", "Same every run (reproducible)", "Custom random seed"],
     index=2, horizontal=False,
     help="Random each run: a fresh random starting point every time. Same every run: forces "
-         "the exact same starting point, for verification/benchmarking. Custom offset: same "
+         "the exact same starting point, for verification/benchmarking. Custom random seed: same "
          "starting seed, but skips ahead N draws first. Doesn't apply when using pooled warm "
          "start above, since that fixes the starting point directly."
 )
 if _c2.button("↺", key="d_seed", help="Reset to default"):
-    seed_mode = "Custom offset"
+    seed_mode = "Custom random seed"
 
 if seed_mode == "Random each run":
     real_if_frozen = 0
