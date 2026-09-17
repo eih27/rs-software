@@ -22,6 +22,14 @@ st.caption(
     "into a NumPy format, so the same data can be used in Python without MATLAB."
 )
 
+st.info(
+    "Accepts **either** a choices file or a coordinates file — the type is detected "
+    "automatically from the file's contents, no need to tell it which one you're uploading.\n\n"
+    "Choices and coordinates files for the same dataset usually share the same name, just with "
+    "`choices` swapped for `coords` — e.g. `bgca3pt_choices_MC_sess01_10.mat` and "
+    "`bgca3pt_coords_MC_sess01_10.mat`."
+)
+
 with st.expander("New here? What is this, and what file do I need?", expanded=False):
     st.markdown(
         "This lab's data comes out of MATLAB/Octave as `.mat` files. To work with that data "

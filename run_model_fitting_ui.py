@@ -193,12 +193,12 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("Random seed")
 seed_mode = st.sidebar.radio(
     "Starting position",
-    ["Random each run", "Same every run (reproducible)", "Custom offset"],
+    ["Random each run", "Same every run (reproducible)", "Custom random seed"],
     index=0, disabled=use_defaults,
     help="Random each run: normal use, a fresh random starting point every time. "
          "Same every run: forces the exact same starting point, so re-running gives "
          "identical results -- useful for verification/benchmarking. "
-         "Custom offset: same starting seed, but skips ahead N draws first."
+         "Custom random seed: same starting seed, but skips ahead N draws first."
 )
 if use_defaults:
     seed_mode = "Random each run"
@@ -227,6 +227,7 @@ run_btn = st.sidebar.button("Run MDS", type="primary", use_container_width=True)
 # Main area
 # ---------------------------------------------------------------------------
 st.title("MDS Fitting: Choice → Coordinates")
+st.caption("Construct coordinates of a representational space from choice data.")
 
 # readiness check
 if input_mode == "Upload file":
@@ -354,7 +355,14 @@ with st.spinner("Computing bias estimates and building output file..."):
         out_dict['stim_labels'] = np.array(stim_list, dtype=f'S{max_len}')
         bias_ok = False
 
-out_filename = f"{exp_label}_coords_{subject_label}.mat"
+# default the output name to the input choice file's name with "coords" in
+# place of "choices" (e.g. bgca3pt_choices_MC_sess01_10.mat -> ..._coords_...),
+# matching the naming convention used across the toolkit; fall back to the
+# exp/subject labels if the source filename doesn't follow that convention
+if 'choices' in name:
+    out_filename = name.replace('choices', 'coords') + '.mat'
+else:
+    out_filename = f"{exp_label}_coords_{subject_label}.mat"
 with tempfile.NamedTemporaryFile(suffix='.mat', delete=False) as tmp_out:
     savemat(tmp_out.name, out_dict)
     with open(tmp_out.name, 'rb') as f:

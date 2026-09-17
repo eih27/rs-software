@@ -26,15 +26,15 @@ with st.expander("New here? What's an odd-one-out experiment, and why convert it
     st.markdown(
         "**Odd-one-out (OOO)** is a judgment task: a subject sees **three** stimuli at once "
         "and picks the one that looks most different from the other two — the \"odd one out.\" "
-        "This is a different task design from the lab's more common **triadic** task, where a "
+        "This is a different task design from the lab's **triadic** task, where a "
         "subject sees a reference plus two others and picks which of the two is *more similar* "
         "to the reference.\n\n"
         "The two tasks produce different data, but they can both be turned into the same "
         "underlying comparison: \"is A closer to the reference than B?\" This tool does that "
         "conversion — every odd-one-out judgment actually implies two of these standard "
         "triadic comparisons, so it gets split into 2 output rows.\n\n"
-        "**Why bother?** So the *rest* of the pipeline (fitting coordinates, running "
-        "verification, etc.) only ever has to understand one data format, regardless of which "
+        "**Why bother?** So the *rest* of the pipeline (comparing RS, fitting coordinates, "
+        "etc.) only ever has to understand one data format, regardless of which "
         "task originally produced the judgments."
     )
 
