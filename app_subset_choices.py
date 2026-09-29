@@ -109,14 +109,10 @@ st.markdown(
 
 with st.expander("New here? What does this do?", expanded=False):
     st.markdown(
-        "Sometimes you only want to analyze part of a dataset — say, just the horizontal "
-        "axis of a texture domain, or everything except one bad stimulus. This tool takes "
-        "a choice file and a selection rule, and produces a smaller choice file containing "
-        "only the stimuli you asked for.\n\n"
-        "**What it does under the hood:** any trial that references an excluded stimulus "
-        "is dropped entirely (a trial referencing a stimulus that no longer exists doesn't "
-        "make sense), and the stimuli that remain are renumbered sequentially, starting "
-        "from 1 — not left with gaps where the removed ones used to be."
+        "Upload a choice file, pick which stimuli to keep or drop, and download a "
+        "smaller version with just those stimuli.\n\n"
+        "Any trial that mentions a removed stimulus gets dropped too, and the "
+        "remaining stimuli are renumbered from 1, with no gaps."
     )
 
 st.sidebar.title("Subset Stimuli")
