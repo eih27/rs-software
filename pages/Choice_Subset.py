@@ -145,50 +145,76 @@ if uploaded is None:
     )
     st.stop()
 
-with tempfile.NamedTemporaryFile(suffix=".mat", delete=False) as tmp:
-    tmp.write(uploaded.read())
-    tmp_path = tmp.name
+# A fresh upload (new file_id) resets any chained filtering from a previous file.
+# Re-running with the SAME uploaded file (e.g. after clicking "Filter this result
+# again") must NOT re-load from disk, since that would wipe out the chained result
+# and go back to the original data -- so this whole block only runs once per file.
+if st.session_state.get("choice_file_id") != uploaded.file_id:
+    with tempfile.NamedTemporaryFile(suffix=".mat", delete=False) as tmp:
+        tmp.write(uploaded.read())
+        tmp_path = tmp.name
 
-file_format = detect_choice_format(tmp_path)
+    file_format = detect_choice_format(tmp_path)
 
-if file_format == "odd_one_out":
-    os.unlink(tmp_path)
-    st.markdown(
-        '<div class="card"><h3>This is an odd-one-out file</h3>'
-        '<p class="subtitle">It has the same number of columns as a tetradic file, but they '
-        'mean something different — no <code>s4</code> column, three separate odd-count '
-        'columns instead. Use the dedicated odd-one-out page instead.</p></div>',
-        unsafe_allow_html=True,
-    )
-    st.page_link("pages/OOO_Subset.py", label="Go to Subset Stimuli — Odd-One-Out")
-    st.stop()
+    if file_format == "odd_one_out":
+        os.unlink(tmp_path)
+        st.markdown(
+            '<div class="card"><h3>This is an odd-one-out file</h3>'
+            '<p class="subtitle">It has the same number of columns as a tetradic file, but they '
+            'mean something different — no <code>s4</code> column, three separate odd-count '
+            'columns instead. Use the dedicated odd-one-out page instead.</p></div>',
+            unsafe_allow_html=True,
+        )
+        st.page_link("pages/OOO_Subset.py", label="Go to Subset Stimuli — Odd-One-Out")
+        st.stop()
 
-try:
-    resp, rep, metadata, stim_list = load_choices(tmp_path)
-except Exception as e:
-    st.error(f"Could not load file: {e}\n\nMake sure this is a **choice** file, not a coordinates file.")
-    st.stop()
-finally:
-    os.unlink(tmp_path)
+    try:
+        resp, rep, metadata, stim_list = load_choices(tmp_path)
+    except Exception as e:
+        st.error(f"Could not load file: {e}\n\nMake sure this is a **choice** file, not a coordinates file.")
+        st.stop()
+    finally:
+        os.unlink(tmp_path)
+
+    st.session_state["choice_file_id"] = uploaded.file_id
+    st.session_state["choice_file_format"] = file_format
+    st.session_state["choice_original"] = {"resp": resp, "rep": rep, "stim_list": stim_list}
+    st.session_state["choice_working"] = {"resp": resp, "rep": rep, "stim_list": stim_list}
+    st.session_state["choice_chain_count"] = 0
+
+working = st.session_state["choice_working"]
+resp, rep, stim_list = working["resp"], working["rep"], working["stim_list"]
+file_format = st.session_state["choice_file_format"]
+chain_count = st.session_state["choice_chain_count"]
 
 trial_word = {"triadic": "Triads", "tetradic": "Tetrads"}.get(file_format, "Trials")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Selection")
+if chain_count > 0:
+    st.sidebar.caption(
+        f"Filtering pass {chain_count + 1} — working from the previous result "
+        f"({len(stim_list)} stimuli). Selections below start fresh each pass."
+    )
+
+# Widget keys are suffixed with chain_count so each new filtering pass starts with
+# blank selections instead of inheriting stale picks from a stimulus list that may
+# no longer contain those names.
 mode = st.sidebar.radio(
     "How do you want to select stimuli?",
     ["Keep only these (include)", "Remove these (exclude)",
      "Match a pattern (regex)", "Keep all (just reorder)"],
+    key=f"mode-{chain_count}",
 )
 
 include = exclude = regex = None
 regex_mode = "include"
 
 if mode == "Keep only these (include)":
-    include = st.sidebar.multiselect("Stimuli to keep", options=stim_list)
+    include = st.sidebar.multiselect("Stimuli to keep", options=stim_list, key=f"include-{chain_count}")
     selection_ready = bool(include)
 elif mode == "Remove these (exclude)":
-    exclude = st.sidebar.multiselect("Stimuli to remove", options=stim_list)
+    exclude = st.sidebar.multiselect("Stimuli to remove", options=stim_list, key=f"exclude-{chain_count}")
     selection_ready = bool(exclude)
 elif mode == "Match a pattern (regex)":
     regex = st.sidebar.text_input(
@@ -200,21 +226,33 @@ elif mode == "Match a pattern (regex)":
             "- `^(bp|bm)` — starts with bp or bm\n"
             "- `rand` — contains \"rand\" anywhere"
         ),
+        key=f"regex-{chain_count}",
     )
-    regex_mode = st.sidebar.radio("Pattern matches should be...", ["include", "exclude"], horizontal=True)
+    regex_mode = st.sidebar.radio("Pattern matches should be...", ["include", "exclude"],
+                                   horizontal=True, key=f"regex_mode-{chain_count}")
     selection_ready = bool(regex)
 else:  # Keep all (just reorder)
     exclude = []
     selection_ready = True
 
-alphabetize = st.sidebar.checkbox("Alphabetize the output stimulus list", value=False)
+alphabetize = st.sidebar.checkbox("Alphabetize the output stimulus list", value=False,
+                                   key=f"alphabetize-{chain_count}")
 
 st.sidebar.markdown("---")
 run_btn = st.sidebar.button("Run", type="primary", use_container_width=True)
 
+if chain_count > 0:
+    if st.sidebar.button("↺ Reset to original file", use_container_width=True, key="reset_sidebar"):
+        orig = st.session_state["choice_original"]
+        st.session_state["choice_working"] = dict(orig)
+        st.session_state["choice_chain_count"] = 0
+        st.rerun()
+
+pass_note = (f" — filtering pass {chain_count + 1}, chained from the previous result"
+             if chain_count > 0 else "")
 st.markdown(
     f'<div class="card"><h3>Loaded file</h3>'
-    f'<p class="subtitle">{uploaded.name} — detected as <b>{file_format.replace("_", " ")}</b></p>'
+    f'<p class="subtitle">{uploaded.name} — detected as <b>{file_format.replace("_", " ")}</b>{pass_note}</p>'
     f'<div class="metric-row">'
     f'<div class="metric-box"><div class="value">{len(stim_list)}</div><div class="label">Stimuli</div></div>'
     f'<div class="metric-box"><div class="value">{len(resp)}</div><div class="label">{trial_word.rstrip("s")} types</div></div>'
@@ -309,6 +347,26 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+chain_col, reset_col = st.columns(2)
+with chain_col:
+    if new_resp and st.button(
+        "🔁 Filter this result again", use_container_width=True, key="filter_again",
+        help="Use the stimuli and trials kept above as the input for another filtering pass, "
+             "without re-uploading."
+    ):
+        st.session_state["choice_working"] = {"resp": new_resp, "rep": new_rep, "stim_list": new_stims}
+        st.session_state["choice_chain_count"] = chain_count + 1
+        st.rerun()
+with reset_col:
+    if chain_count > 0 and st.button(
+        "↺ Reset to original file", use_container_width=True, key="reset_result",
+        help="Discard all filtering passes and start over from the originally uploaded file."
+    ):
+        orig = st.session_state["choice_original"]
+        st.session_state["choice_working"] = dict(orig)
+        st.session_state["choice_chain_count"] = 0
+        st.rerun()
 
 if not new_resp:
     st.warning(
