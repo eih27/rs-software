@@ -284,3 +284,93 @@ def detect_choice_format(mat_path):
     if any('odd' in n.lower() for n in names):
         return 'odd_one_out'
     return 'unknown'
+
+
+def load_ooo_file(mat_path):
+    """
+    Load an odd-one-out choice file as a plain row table, rather than the
+    trial-key dictionary used for triadic/tetradic files -- an OOO trial
+    carries 3 separate counts (one per stimulus, for how often it was
+    picked as the odd one out), which doesn't fit the single-count-per-trial
+    shape that dictionary was built for.
+
+    Returns:
+        rows: (n_triplets, 6) array, 1-indexed columns
+              [s1, s2, s3, N(s1 odd out), N(s2 odd out), N(s3 odd out)]
+        stim_list: list of stimulus names, in index order
+    """
+    import scipy.io as sio
+
+    raw = sio.loadmat(mat_path, squeeze_me=True)
+    if 'stim_list' not in raw or 'responses' not in raw:
+        raise ValueError("This doesn't look like a choice file -- missing 'stim_list' or 'responses'.")
+    stim_list = [str(s).strip() for s in raw['stim_list']]
+    rows = raw['responses']
+    return rows, stim_list
+
+
+def subset_ooo_file(stim_list, rows, include=None, exclude=None, regex=None,
+                     regex_mode="include", alphabetize=False):
+    """
+    Select a subset of stimuli from an odd-one-out file's data, dropping any
+    triplet that references an excluded stimulus and renumbering the
+    survivors 1..N.
+
+    Args:
+        stim_list: list of stimulus names, as returned by load_ooo_file
+        rows: (n_triplets, 6) array, as returned by load_ooo_file
+        include, exclude, regex, regex_mode, alphabetize: selection options,
+            passed straight through to subset_stimuli
+
+    Returns:
+        new_rows: (n_kept, 6) array, renumbered, with dropped triplets removed
+        kept_names: the surviving stimulus names, in their new index order
+    """
+    import numpy as np
+
+    kept_names, kept_indices = subset_stimuli(
+        stim_list, include=include, exclude=exclude, regex=regex,
+        regex_mode=regex_mode, alphabetize=alphabetize)
+    old_to_new = {old_index: new_index for new_index, old_index in enumerate(kept_indices)}
+    kept_set = set(kept_indices)
+
+    new_rows = []
+    n_dropped = 0
+    for row in rows:
+        s1, s2, s3 = int(row[0]) - 1, int(row[1]) - 1, int(row[2]) - 1  # to 0-indexed
+        if s1 in kept_set and s2 in kept_set and s3 in kept_set:
+            new_rows.append([old_to_new[s1] + 1, old_to_new[s2] + 1, old_to_new[s3] + 1,
+                             row[3], row[4], row[5]])
+        else:
+            n_dropped += 1
+
+    n_excluded_stim = len(stim_list) - len(kept_names)
+    print(f"subset_ooo_file: excluded {n_excluded_stim} of {len(stim_list)} stimuli; "
+          f"dropped {n_dropped} of {len(rows)} triplets that referenced an excluded stimulus "
+          f"({len(new_rows)} triplets remain)")
+
+    new_rows_arr = np.array(new_rows, dtype=np.float64) if new_rows else np.zeros((0, 6))
+    return new_rows_arr, kept_names
+
+
+def save_ooo_file(out_path, rows, stim_list):
+    """
+    Save a rows/stim_list pair (the format load_ooo_file, subset_ooo_file, etc.
+    all use) to a .mat odd-one-out choice file.
+    """
+    import numpy as np
+    from scipy.io import savemat
+
+    if len(rows) == 0:
+        raise ValueError(
+            "Cannot save an empty odd-one-out file -- no triplets remain after filtering. "
+            "This can happen if the stimuli you kept never appear together in the same triplet.")
+
+    max_len = max(len(s) for s in stim_list)
+    savemat(out_path, {
+        'responses': rows,
+        'responses_colnames': ['s1', 's2', 's3', 'N(s1 odd out)', 'N(s2 odd out)', 'N(s3 odd out)'],
+        'stim_list': np.array(stim_list, dtype=f'S{max_len}'),
+        'readme': "Subset of an odd-one-out choice file, produced by subset_ooo_file.",
+    })
+    print(f"Saved: {out_path}  ({len(rows)} triplets, {len(stim_list)} stimuli)")
