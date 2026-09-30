@@ -17,12 +17,11 @@ import scipy.io as sio
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from convert_mat_to_numpy import coords_to_numpy
-from rs_tools.subset_stimuli import subset_coords_file, save_coords_file
+from rs_tools.subset_stimuli import subset_stimuli, subset_coords_file, save_coords_file
 
 st.set_page_config(page_title="Subset Stimuli (Coords)", layout="wide", initial_sidebar_state="expanded")
 
 CUSTOM_CSS = """
-<style>
 <style>
 html, body { font-family: "Helvetica Neue", Inter, -apple-system, sans-serif; }
 
@@ -95,7 +94,6 @@ div.stButton > button[kind="primary"], div.stDownloadButton > button {
 div.stButton > button[kind="primary"]:hover, div.stDownloadButton > button:hover {
     background: #4834D4;
 }
-</style>
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -178,7 +176,8 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("Selection")
 mode = st.sidebar.radio(
     "How do you want to select stimuli?",
-    ["Keep only these (include)", "Remove these (exclude)", "Match a pattern (regex)"],
+    ["Keep only these (include)", "Remove these (exclude)",
+     "Match a pattern (regex)", "Keep all (just reorder)"],
 )
 
 include = exclude = regex = None
@@ -186,18 +185,32 @@ regex_mode = "include"
 
 if mode == "Keep only these (include)":
     include = st.sidebar.multiselect("Stimuli to keep", options=stim_list)
+    selection_ready = bool(include)
 elif mode == "Remove these (exclude)":
     exclude = st.sidebar.multiselect("Stimuli to remove", options=stim_list)
-else:
-    regex = st.sidebar.text_input("Regex pattern", placeholder="e.g. ^b for anything starting with b")
+    selection_ready = bool(exclude)
+elif mode == "Match a pattern (regex)":
+    regex = st.sidebar.text_input(
+        "Regex pattern", placeholder="e.g. ^b",
+        help=(
+            "Examples:\n"
+            "- `^b` — starts with b\n"
+            "- `0600$` — ends with 0600\n"
+            "- `^(bp|bm)` — starts with bp or bm\n"
+            "- `rand` — contains \"rand\" anywhere"
+        ),
+    )
     regex_mode = st.sidebar.radio("Pattern matches should be...", ["include", "exclude"], horizontal=True)
+    selection_ready = bool(regex)
+else:  # Keep all (just reorder)
+    exclude = []
+    selection_ready = True
 
 alphabetize = st.sidebar.checkbox("Alphabetize the output stimulus list", value=False)
 
 st.sidebar.markdown("---")
 run_btn = st.sidebar.button("Run", type="primary", use_container_width=True)
 
-selection_made = bool(include or exclude or regex)
 dims_str = ", ".join(f"{d}D" for d in sorted(coords_by_dim))
 
 st.markdown(
@@ -210,23 +223,48 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if not run_btn:
-    step_badges(True, selection_made, False)
+# Live preview -- cheap, uses only the lightweight name-selection step, not the full
+# coords-file processing, so it can update instantly as the sidebar selection changes.
+if selection_ready:
+    try:
+        preview_names, _ = subset_stimuli(
+            stim_list, include=include, exclude=exclude, regex=regex,
+            regex_mode=regex_mode, alphabetize=alphabetize)
+        preview_error = None
+    except ValueError as e:
+        preview_names = None
+        preview_error = str(e)
+
+    if preview_error:
+        st.markdown(
+            f'<div class="card"><h3>Preview</h3>'
+            f'<p class="subtitle">{preview_error}</p></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        preview_pills = "".join(f'<span class="pill">{name}</span>' for name in preview_names[:24])
+        preview_more = (f'<span class="pill more">+{len(preview_names) - 24} more</span>'
+                        if len(preview_names) > 24 else "")
+        st.markdown(
+            f'<div class="card"><h3>Preview</h3>'
+            f'<p class="subtitle">Will keep {len(preview_names)} of {len(stim_list)} stimuli. '
+            f'Click Run to actually process the file.</p>'
+            f'<div class="pill-list">{preview_pills}{preview_more}</div></div>',
+            unsafe_allow_html=True,
+        )
+else:
     st.markdown(
-        '<div class="card"><h3>Set your selection</h3>'
-        '<p class="subtitle">Choose stimuli in the sidebar, then click <b>Run</b>.</p></div>',
+        '<div class="card"><h3>Preview</h3>'
+        '<p class="subtitle">Choose stimuli in the sidebar to see a preview here.</p></div>',
         unsafe_allow_html=True,
     )
+
+if not run_btn:
+    step_badges(True, selection_ready, False)
     st.stop()
 
-if mode == "Keep only these (include)" and not include:
-    st.error("Select at least one stimulus to keep.")
-    st.stop()
-if mode == "Remove these (exclude)" and not exclude:
-    st.error("Select at least one stimulus to remove.")
-    st.stop()
-if mode == "Match a pattern (regex)" and not regex:
-    st.error("Enter a regex pattern.")
+if not selection_ready:
+    st.error("Set your selection in the sidebar before running.")
     st.stop()
 
 try:

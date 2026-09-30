@@ -254,3 +254,33 @@ def save_coords_file(out_path, coords_by_dim, stim_list, extra_fields=None):
 
     savemat(out_path, data)
     print(f"Saved: {out_path}  ({len(stim_list)} stimuli, dims {sorted(coords_by_dim)})")
+
+
+def detect_choice_format(mat_path):
+    """
+    Inspect a choice file's raw column names to tell triadic, tetradic, and
+    odd-one-out formats apart. Tetradic and odd-one-out files both have 6
+    columns, so column count alone can't tell them apart -- this looks at
+    the actual column names instead:
+        triadic:     ref, s1, s2, N(D(ref, s1) > D(ref, s2)), N_Repeats(...)
+        tetradic:    s1, s2, s3, s4, N(D(s1, s2) > D(s3, s4)), N_Repeats(...)
+        odd-one-out: s1, s2, s3, N(s1 odd out), N(s2 odd out), N(s3 odd out)
+    Tetradic always has an 's4' column; odd-one-out never does.
+
+    Returns: 'triadic', 'tetradic', 'odd_one_out', or 'unknown'
+    """
+    import scipy.io as sio
+
+    raw = sio.loadmat(mat_path, squeeze_me=True)
+    colnames_key = 'responses_colnames' if 'responses_colnames' in raw else 'response_colnames'
+    if colnames_key not in raw:
+        return 'unknown'
+
+    names = [str(c).strip() for c in raw[colnames_key]]
+    if any(n.startswith('ref') for n in names):
+        return 'triadic'
+    if any(n == 's4' for n in names):
+        return 'tetradic'
+    if any('odd' in n.lower() for n in names):
+        return 'odd_one_out'
+    return 'unknown'
