@@ -1,5 +1,5 @@
 """
-pages/OOO_Subset.py — the odd-one-out page of the Subset Stimuli app.
+pages/Choice_Subset.py — the triadic/tetradic choice-file page of the Subset Stimuli app.
 
 This is one page of a multi-page app; app_subset_choices.py is the entry point
 (and top-nav router) that Streamlit Cloud actually runs.
@@ -13,9 +13,11 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from rs_tools.subset_stimuli import subset_stimuli, load_ooo_file, subset_ooo_file, save_ooo_file
+from src.rs_py.utils.util import load_choices
+from rs_tools.subset_stimuli import subset_stimuli, subset_choice_file, save_choice_file, detect_choice_format
 
-CUSTOM_CSS = """<style>
+CUSTOM_CSS = """
+<style>
 html, body { font-family: "Helvetica Neue", Inter, -apple-system, sans-serif; }
 
 .block-container { padding-top: 2.2rem; max-width: 900px; }
@@ -87,35 +89,34 @@ div.stButton > button[kind="primary"], div.stDownloadButton > button {
 div.stButton > button[kind="primary"]:hover, div.stDownloadButton > button:hover {
     background: #4834D4;
 }
-</style>"""
+</style>
+"""
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 st.markdown(
-    '''
+    """
     <div class="hero">
-        <h1>Subset Stimuli — Odd-One-Out</h1>
-        <p>Keep or remove specific stimuli from an odd-one-out choice file. This is
-        a separate tool from the triadic/tetradic version, since odd-one-out
-        trials carry three separate counts instead of one.</p>
+        <h1>Subset Stimuli</h1>
+        <p>Keep or remove specific stimuli from a choice file before running analysis —
+        works on both triadic and tetradic files.</p>
     </div>
-    ''',
+    """,
     unsafe_allow_html=True,
 )
 
 with st.expander("New here? What does this do?", expanded=False):
     st.markdown(
-        "Upload an odd-one-out choice file, pick which stimuli to keep or drop, and "
-        "download a smaller version with just those stimuli.\n\n"
-        "Any triplet that mentions a removed stimulus gets dropped too (all three "
-        "stimuli in a triplet have to survive for the triplet to survive), and the "
+        "Upload a choice file, pick which stimuli to keep or drop, and download a "
+        "smaller version with just those stimuli.\n\n"
+        "Any trial that mentions a removed stimulus gets dropped too, and the "
         "remaining stimuli are renumbered from 1, with no gaps."
     )
 
-st.sidebar.title("Subset Stimuli (OOO)")
-st.sidebar.caption("Filter an odd-one-out choice file down to a chosen set of stimuli.")
+st.sidebar.title("Subset Stimuli")
+st.sidebar.caption("Filter a choice file down to a chosen set of stimuli.")
 st.sidebar.markdown("---")
 
-uploaded = st.sidebar.file_uploader("Odd-one-out file (.mat)", type="mat")
+uploaded = st.sidebar.file_uploader("Choice file (.mat)", type="mat")
 
 
 def step_badges(uploaded_done, selected_done, run_done):
@@ -124,13 +125,13 @@ def step_badges(uploaded_done, selected_done, run_done):
             return "step done"
         return "step pending" if not active else "step"
     st.markdown(
-        f'''
+        f"""
         <div class="steps">
             <div class="{cls(uploaded_done, True)}"><div class="num">1</div><div class="label">Upload file</div></div>
             <div class="{cls(selected_done, uploaded_done)}"><div class="num">2</div><div class="label">Choose stimuli</div></div>
             <div class="{cls(run_done, selected_done)}"><div class="num">3</div><div class="label">Run &amp; download</div></div>
         </div>
-        ''',
+        """,
         unsafe_allow_html=True,
     )
 
@@ -139,7 +140,7 @@ if uploaded is None:
     step_badges(False, False, False)
     st.markdown(
         '<div class="card"><h3>Get started</h3>'
-        '<p class="subtitle">Upload a .mat odd-one-out file in the sidebar to begin.</p></div>',
+        '<p class="subtitle">Upload a .mat choice file in the sidebar to begin.</p></div>',
         unsafe_allow_html=True,
     )
     st.stop()
@@ -148,13 +149,29 @@ with tempfile.NamedTemporaryFile(suffix=".mat", delete=False) as tmp:
     tmp.write(uploaded.read())
     tmp_path = tmp.name
 
+file_format = detect_choice_format(tmp_path)
+
+if file_format == "odd_one_out":
+    os.unlink(tmp_path)
+    st.markdown(
+        '<div class="card"><h3>This is an odd-one-out file</h3>'
+        '<p class="subtitle">It has the same number of columns as a tetradic file, but they '
+        'mean something different — no <code>s4</code> column, three separate odd-count '
+        'columns instead. Use the dedicated odd-one-out page instead.</p></div>',
+        unsafe_allow_html=True,
+    )
+    st.page_link("pages/OOO_Subset.py", label="Go to Subset Stimuli — Odd-One-Out")
+    st.stop()
+
 try:
-    rows, stim_list = load_ooo_file(tmp_path)
+    resp, rep, metadata, stim_list = load_choices(tmp_path)
 except Exception as e:
-    st.error(f"Could not load file: {e}\n\nMake sure this is an **odd-one-out** file.")
+    st.error(f"Could not load file: {e}\n\nMake sure this is a **choice** file, not a coordinates file.")
     st.stop()
 finally:
     os.unlink(tmp_path)
+
+trial_word = {"triadic": "Triads", "tetradic": "Tetrads"}.get(file_format, "Trials")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Selection")
@@ -178,10 +195,10 @@ elif mode == "Match a pattern (regex)":
         "Regex pattern", placeholder="e.g. ^b",
         help=(
             "Examples:\n"
-            "- `^b` \u2014 starts with b\n"
-            "- `0600$` \u2014 ends with 0600\n"
-            "- `^(bp|bm)` \u2014 starts with bp or bm\n"
-            "- `rand` \u2014 contains \"rand\" anywhere"
+            "- `^b` — starts with b\n"
+            "- `0600$` — ends with 0600\n"
+            "- `^(bp|bm)` — starts with bp or bm\n"
+            "- `rand` — contains \"rand\" anywhere"
         ),
     )
     regex_mode = st.sidebar.radio("Pattern matches should be...", ["include", "exclude"], horizontal=True)
@@ -197,14 +214,16 @@ run_btn = st.sidebar.button("Run", type="primary", use_container_width=True)
 
 st.markdown(
     f'<div class="card"><h3>Loaded file</h3>'
-    f'<p class="subtitle">{uploaded.name}</p>'
+    f'<p class="subtitle">{uploaded.name} — detected as <b>{file_format.replace("_", " ")}</b></p>'
     f'<div class="metric-row">'
     f'<div class="metric-box"><div class="value">{len(stim_list)}</div><div class="label">Stimuli</div></div>'
-    f'<div class="metric-box"><div class="value">{rows.shape[0]}</div><div class="label">Triplet types</div></div>'
+    f'<div class="metric-box"><div class="value">{len(resp)}</div><div class="label">{trial_word.rstrip("s")} types</div></div>'
     f'</div></div>',
     unsafe_allow_html=True,
 )
 
+# Live preview -- cheap, uses only the lightweight name-selection step, not the full
+# choice-file processing, so it can update instantly as the sidebar selection changes.
 if selection_ready:
     try:
         preview_names, _ = subset_stimuli(
@@ -248,8 +267,8 @@ if not selection_ready:
     st.stop()
 
 try:
-    new_rows, new_stims = subset_ooo_file(
-        stim_list, rows, include=include, exclude=exclude,
+    new_resp, new_rep, new_stims = subset_choice_file(
+        stim_list, resp, rep, include=include, exclude=exclude,
         regex=regex, regex_mode=regex_mode, alphabetize=alphabetize)
 except ValueError as e:
     st.error(str(e))
@@ -258,13 +277,13 @@ except ValueError as e:
 step_badges(True, True, True)
 
 n_excluded_stim = len(stim_list) - len(new_stims)
-n_dropped_triplets = rows.shape[0] - new_rows.shape[0]
+n_dropped_trials = len(resp) - len(new_resp)
 
 pills = "".join(f'<span class="pill">{name}</span>' for name in new_stims[:24])
 more = f'<span class="pill more">+{len(new_stims) - 24} more</span>' if len(new_stims) > 24 else ""
 
 st.markdown(
-    f'''
+    f"""
     <div class="card">
         <h3>Result</h3>
         <div class="metric-row">
@@ -277,30 +296,31 @@ st.markdown(
                 <div class="label">Stimuli excluded</div>
             </div>
             <div class="metric-box kept">
-                <div class="value">{new_rows.shape[0]} / {rows.shape[0]}</div>
-                <div class="label">Triplets kept</div>
+                <div class="value">{len(new_resp)} / {len(resp)}</div>
+                <div class="label">{trial_word} kept</div>
             </div>
             <div class="metric-box excluded">
-                <div class="value">{n_dropped_triplets}</div>
-                <div class="label">Triplets excluded</div>
+                <div class="value">{n_dropped_trials}</div>
+                <div class="label">{trial_word} excluded</div>
             </div>
         </div>
         <div class="pill-list">{pills}{more}</div>
     </div>
-    ''',
+    """,
     unsafe_allow_html=True,
 )
 
-if new_rows.shape[0] == 0:
+if not new_resp:
     st.warning(
-        "No triplets remain after filtering, so there\'s nothing to download. "
-        "Every triplet needs all 3 of its stimuli to survive -- try keeping a larger set."
+        f"No {trial_word.lower()} remain after filtering, so there's nothing to download. "
+        "This can happen with tetradic files if the stimuli you kept never "
+        "appear together in the same trial -- try keeping a larger set."
     )
     st.stop()
 
 buf = io.BytesIO()
 with tempfile.NamedTemporaryFile(suffix=".mat", delete=False) as tmp_out:
-    save_ooo_file(tmp_out.name, new_rows, new_stims)
+    save_choice_file(tmp_out.name, new_resp, new_rep, new_stims)
     with open(tmp_out.name, "rb") as f:
         buf.write(f.read())
 os.unlink(tmp_out.name)
