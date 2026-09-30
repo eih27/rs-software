@@ -306,6 +306,11 @@ def load_ooo_file(mat_path):
         raise ValueError("This doesn't look like a choice file -- missing 'stim_list' or 'responses'.")
     stim_list = [str(s).strip() for s in raw['stim_list']]
     rows = raw['responses']
+    if rows.ndim != 2 or rows.shape[1] != 6:
+        raise ValueError(
+            "This doesn't look like an odd-one-out file -- expected 6 columns "
+            f"(s1, s2, s3, N(s1 odd out), N(s2 odd out), N(s3 odd out)), got shape {rows.shape}. "
+            "Make sure this is an odd-one-out file, not a triadic or tetradic choice file.")
     return rows, stim_list
 
 
