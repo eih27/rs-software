@@ -13,7 +13,9 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from rs_tools.subset_stimuli import subset_stimuli, load_ooo_file, subset_ooo_file, save_ooo_file
+from rs_tools.subset_stimuli import (
+    subset_stimuli, load_ooo_file, subset_ooo_file, save_ooo_file, validate_ooo_responses,
+)
 
 CUSTOM_CSS = """<style>
 html, body { font-family: "Helvetica Neue", Inter, -apple-system, sans-serif; }
@@ -155,6 +157,12 @@ except Exception as e:
     st.stop()
 finally:
     os.unlink(tmp_path)
+
+try:
+    validate_ooo_responses(rows, len(stim_list))
+except ValueError as e:
+    st.error(f"This doesn't look like a valid odd-one-out file:\n\n{e}")
+    st.stop()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Selection")

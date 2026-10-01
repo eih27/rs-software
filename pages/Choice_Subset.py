@@ -14,7 +14,10 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.rs_py.utils.util import load_choices
-from rs_tools.subset_stimuli import subset_stimuli, subset_choice_file, save_choice_file, detect_choice_format
+from rs_tools.subset_stimuli import (
+    subset_stimuli, subset_choice_file, save_choice_file, detect_choice_format,
+    validate_choice_responses,
+)
 
 CUSTOM_CSS = """
 <style>
@@ -171,7 +174,14 @@ if st.session_state.get("choice_file_id") != uploaded.file_id:
     try:
         resp, rep, metadata, stim_list = load_choices(tmp_path)
     except Exception as e:
+        os.unlink(tmp_path)
         st.error(f"Could not load file: {e}\n\nMake sure this is a **choice** file, not a coordinates file.")
+        st.stop()
+
+    try:
+        validate_choice_responses(tmp_path, file_format, len(stim_list))
+    except ValueError as e:
+        st.error(f"This doesn't look like a valid {file_format} file:\n\n{e}")
         st.stop()
     finally:
         os.unlink(tmp_path)

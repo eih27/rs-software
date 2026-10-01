@@ -286,6 +286,109 @@ def detect_choice_format(mat_path):
     return 'unknown'
 
 
+def validate_choice_responses(mat_path, file_format, n_stimuli):
+    """
+    Sanity-check a triadic or tetradic choice file's raw `responses` array
+    against what that format is actually supposed to contain, so a
+    wrong-format or corrupted upload gets caught with a clear error right
+    away instead of failing obscurely downstream (or silently producing
+    nonsense, e.g. via int() truncating a stray float).
+
+    Checks, for the relevant column group:
+        - right number of columns for the format (5 for triadic, 6 for tetradic)
+        - every value is a whole number (no fractional values anywhere)
+        - the stimulus-index columns (ref/s1/s2, or s1/s2/s3/s4) are all
+          valid 1-based indices into stim_list (1..n_stimuli)
+        - within a row, the stimulus-index columns are pairwise distinct
+          (a trial can't compare a stimulus to itself)
+        - the count column is >= 0
+        - the repeat column is >= 0, and count <= repeat for every row
+          (a stimulus can't be "chosen" more times than the trial was shown)
+
+    Raises ValueError with a specific, actionable message if anything is
+    wrong. Returns None (nothing to report) if the file checks out.
+    """
+    import numpy as np
+    import scipy.io as sio
+
+    raw = sio.loadmat(mat_path, squeeze_me=True)
+    if 'responses' not in raw:
+        raise ValueError("This file has no 'responses' variable -- it doesn't look like a choice file at all.")
+    responses = raw['responses']
+
+    colnames_key = 'responses_colnames' if 'responses_colnames' in raw else 'response_colnames'
+    names = [str(c).strip() for c in raw[colnames_key]]
+    col_idx = {name: i for i, name in enumerate(names)}
+
+    if file_format == "triadic":
+        index_cols = ["ref", "s1", "s2"]
+        expected_ncols = 5
+    elif file_format == "tetradic":
+        index_cols = ["s1", "s2", "s3", "s4"]
+        expected_ncols = 6
+    else:
+        raise ValueError(f"validate_choice_responses only handles triadic/tetradic, got {file_format!r}")
+
+    if responses.ndim != 2:
+        raise ValueError(f"'responses' should be a 2-D table, but this file's is {responses.ndim}-D.")
+    if responses.shape[1] != expected_ncols:
+        raise ValueError(
+            f"A {file_format} choice file should have {expected_ncols} columns, "
+            f"but this file has {responses.shape[1]}. Make sure this is really a "
+            f"{file_format} file, not a different comparison type."
+        )
+    if any(name not in col_idx for name in index_cols):
+        missing = [name for name in index_cols if name not in col_idx]
+        raise ValueError(
+            f"This file is missing the expected column(s) {missing} for a {file_format} file "
+            f"-- its columns are named {names}."
+        )
+
+    count_col = next((i for n, i in col_idx.items() if n.startswith("N(")), None)
+    repeat_col = next((i for n, i in col_idx.items() if n.startswith("N_Repeats")), None)
+    if count_col is None or repeat_col is None:
+        raise ValueError(f"Couldn't find the count/repeat columns in {names} -- is this really a choice file?")
+
+    not_whole = responses != np.round(responses)
+    if not_whole.any():
+        row, col = np.argwhere(not_whole)[0]
+        raise ValueError(
+            f"All values in a choice file should be whole numbers, but row {row} column "
+            f"'{names[col]}' is {responses[row, col]!r}. This usually means the file isn't "
+            f"actually a choice file (or is the wrong comparison type)."
+        )
+
+    idx_positions = [col_idx[name] for name in index_cols]
+    idx_values = responses[:, idx_positions]
+    if idx_values.min() < 1 or idx_values.max() > n_stimuli:
+        bad_row = np.argmax((idx_values < 1).any(axis=1) | (idx_values > n_stimuli).any(axis=1))
+        raise ValueError(
+            f"Row {bad_row}'s stimulus indices {list(idx_values[bad_row])} aren't all valid "
+            f"1-based positions into a {n_stimuli}-stimulus list. Make sure this file's stim_list "
+            f"matches its responses, and that it's really a {file_format} file."
+        )
+
+    dup_row = np.argmax([len(set(row)) != len(row) for row in idx_values])
+    if len(set(idx_values[dup_row])) != len(idx_values[dup_row]):
+        raise ValueError(
+            f"Row {dup_row} compares a stimulus to itself (indices {list(idx_values[dup_row])}) "
+            f"-- that shouldn't be possible in a real choice file."
+        )
+
+    counts = responses[:, count_col]
+    repeats = responses[:, repeat_col]
+    if (counts < 0).any():
+        raise ValueError(f"Row {int(np.argmax(counts < 0))}'s count is negative ({counts.min()}), which isn't valid.")
+    if (repeats < 0).any():
+        raise ValueError(f"Row {int(np.argmax(repeats < 0))}'s repeat count is negative ({repeats.min()}), which isn't valid.")
+    if (counts > repeats).any():
+        bad_row = int(np.argmax(counts > repeats))
+        raise ValueError(
+            f"Row {bad_row} has a count ({counts[bad_row]}) greater than its repeat total "
+            f"({repeats[bad_row]}) -- a trial can't be chosen more times than it was shown."
+        )
+
+
 def load_ooo_file(mat_path):
     """
     Load an odd-one-out choice file as a plain row table, rather than the
@@ -312,6 +415,57 @@ def load_ooo_file(mat_path):
             f"(s1, s2, s3, N(s1 odd out), N(s2 odd out), N(s3 odd out)), got shape {rows.shape}. "
             "Make sure this is an odd-one-out file, not a triadic or tetradic choice file.")
     return rows, stim_list
+
+
+def validate_ooo_responses(rows, n_stimuli):
+    """
+    Sanity-check an odd-one-out file's row table beyond just its column
+    count (already checked by load_ooo_file), so a wrong-format or
+    corrupted upload is caught with a clear error up front.
+
+    Checks:
+        - every value is a whole number
+        - the s1/s2/s3 columns are all valid 1-based indices into stim_list
+        - within a row, s1/s2/s3 are pairwise distinct
+        - the three "odd one out" count columns are all >= 0
+
+    Raises ValueError with a specific message if anything is wrong.
+    Returns None if the file checks out.
+    """
+    import numpy as np
+
+    not_whole = rows != np.round(rows)
+    if not_whole.any():
+        row, col = np.argwhere(not_whole)[0]
+        raise ValueError(
+            f"All values in an odd-one-out file should be whole numbers, but row {row} "
+            f"column {col} is {rows[row, col]!r}. This usually means the file isn't "
+            f"actually an odd-one-out file."
+        )
+
+    idx_values = rows[:, :3]
+    if idx_values.min() < 1 or idx_values.max() > n_stimuli:
+        bad_row = np.argmax((idx_values < 1).any(axis=1) | (idx_values > n_stimuli).any(axis=1))
+        raise ValueError(
+            f"Row {bad_row}'s stimulus indices {list(idx_values[bad_row])} aren't all valid "
+            f"1-based positions into a {n_stimuli}-stimulus list. Make sure this file's stim_list "
+            f"matches its responses."
+        )
+
+    dup_row = np.argmax([len(set(row)) != len(row) for row in idx_values])
+    if len(set(idx_values[dup_row])) != len(idx_values[dup_row]):
+        raise ValueError(
+            f"Row {dup_row} repeats a stimulus within the same triplet (indices "
+            f"{list(idx_values[dup_row])}) -- that shouldn't be possible in a real file."
+        )
+
+    counts = rows[:, 3:6]
+    if (counts < 0).any():
+        bad_row = np.argmax((counts < 0).any(axis=1))
+        raise ValueError(
+            f"Row {bad_row}'s odd-one-out counts ({list(counts[bad_row])}) include a negative "
+            f"value, which isn't valid."
+        )
 
 
 def subset_ooo_file(stim_list, rows, include=None, exclude=None, regex=None,
