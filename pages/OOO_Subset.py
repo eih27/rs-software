@@ -180,7 +180,8 @@ elif mode == "Match a pattern (regex)":
             "Examples:\n"
             "- `^b` \u2014 starts with b\n"
             "- `0600$` \u2014 ends with 0600\n"
-            "- `^(bp|bm)` \u2014 starts with bp or bm\n"
+            "- `p\\d{4}$` \u2014 ends in \"p\" + 4 digits (e.g. bp0400, cp0200) \u2014 picks out positives\n"
+            "- `m\\d{4}$` \u2014 ends in \"m\" + 4 digits (e.g. bm0400, cm0200) \u2014 picks out negatives\n"
             "- `rand` \u2014 contains \"rand\" anywhere"
         ),
     )

@@ -196,7 +196,8 @@ elif mode == "Match a pattern (regex)":
             "Examples:\n"
             "- `^b` — starts with b\n"
             "- `0600$` — ends with 0600\n"
-            "- `^(bp|bm)` — starts with bp or bm\n"
+            "- `p\\d{4}$` — ends in \"p\" + 4 digits (e.g. bp0400, cp0200) — picks out positives\n"
+            "- `m\\d{4}$` — ends in \"m\" + 4 digits (e.g. bm0400, cm0200) — picks out negatives\n"
             "- `rand` — contains \"rand\" anywhere"
         ),
     )
