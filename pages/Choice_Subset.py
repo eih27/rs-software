@@ -252,14 +252,38 @@ alphabetize = st.sidebar.checkbox("Alphabetize the output stimulus list", value=
 st.sidebar.markdown("---")
 run_btn = st.sidebar.button("Run", type="primary", use_container_width=True)
 
-if chain_count > 0:
-    if st.sidebar.button("↺ Reset to original file", use_container_width=True, key="reset_sidebar"):
-        orig = st.session_state["choice_original"]
-        st.session_state["choice_working"] = dict(orig)
-        st.session_state["choice_chain_count"] = 0
-        st.rerun()
+# Buttons use on_click callbacks, which run BEFORE the script reruns. A plain
+# `if st.button(...)` placed after the Run check never fires: clicking it reruns
+# the page with Run no longer pressed, and the script stops before reaching it.
+def _chain_to(new_resp, new_rep, new_stims, new_count):
+    st.session_state["choice_working"] = {"resp": new_resp, "rep": new_rep, "stim_list": new_stims}
+    st.session_state["choice_chain_count"] = new_count
+    st.session_state["choice_just_chained"] = True
 
-pass_note = (f" — filtering pass {chain_count + 1}, chained from the previous result"
+
+def _reset_to_original():
+    st.session_state["choice_working"] = dict(st.session_state["choice_original"])
+    st.session_state["choice_chain_count"] = 0
+
+
+if chain_count > 0:
+    st.sidebar.button("↺ Reset to original file", use_container_width=True,
+                      key="reset_sidebar", on_click=_reset_to_original)
+
+if st.session_state.pop("choice_just_chained", False):
+    st.toast(f"Ready for pass {chain_count + 1} -- pick what to keep or remove from this result.", icon="🔁")
+
+if chain_count > 0:
+    st.markdown(
+        f'<div class="card"><h3>Pass {chain_count + 1}: filtering your last result</h3>'
+        f'<p class="subtitle">You are now working from the result of pass {chain_count}, not your '
+        f'original upload ({len(stim_list)} stimuli, {len(resp)} {trial_word.lower()} left). '
+        f'Choose what to keep or remove in the sidebar, then click Run. '
+        f'Use "Reset to original file" in the sidebar to start over.</p></div>',
+        unsafe_allow_html=True,
+    )
+
+pass_note = (f" — pass {chain_count + 1}, working from the result of pass {chain_count}"
              if chain_count > 0 else "")
 st.markdown(
     f'<div class="card"><h3>Loaded file</h3>'
@@ -307,20 +331,28 @@ else:
         unsafe_allow_html=True,
     )
 
-if not run_btn:
+# The result is remembered for as long as the selection stays the same, so it
+# survives reruns caused by the download button or the filter-again button.
+selection_sig = (chain_count, mode, tuple(include or ()), tuple(exclude or ()),
+                 regex, regex_mode, alphabetize)
+stored = st.session_state.get("choice_result")
+
+if run_btn:
+    if not selection_ready:
+        st.error("Set your selection in the sidebar before running.")
+        st.stop()
+    try:
+        new_resp, new_rep, new_stims = subset_choice_file(
+            stim_list, resp, rep, include=include, exclude=exclude,
+            regex=regex, regex_mode=regex_mode, alphabetize=alphabetize)
+    except ValueError as e:
+        st.error(str(e))
+        st.stop()
+    st.session_state["choice_result"] = {"sig": selection_sig, "data": (new_resp, new_rep, new_stims)}
+elif stored and stored["sig"] == selection_sig:
+    new_resp, new_rep, new_stims = stored["data"]
+else:
     step_badges(True, selection_ready, False)
-    st.stop()
-
-if not selection_ready:
-    st.error("Set your selection in the sidebar before running.")
-    st.stop()
-
-try:
-    new_resp, new_rep, new_stims = subset_choice_file(
-        stim_list, resp, rep, include=include, exclude=exclude,
-        regex=regex, regex_mode=regex_mode, alphabetize=alphabetize)
-except ValueError as e:
-    st.error(str(e))
     st.stop()
 
 step_badges(True, True, True)
@@ -359,25 +391,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-chain_col, reset_col = st.columns(2)
-with chain_col:
-    if new_resp and st.button(
-        "🔁 Filter this result again", use_container_width=True, key="filter_again",
-        help="Use the stimuli and trials kept above as the input for another filtering pass, "
-             "without re-uploading."
-    ):
-        st.session_state["choice_working"] = {"resp": new_resp, "rep": new_rep, "stim_list": new_stims}
-        st.session_state["choice_chain_count"] = chain_count + 1
-        st.rerun()
-with reset_col:
-    if chain_count > 0 and st.button(
-        "↺ Reset to original file", use_container_width=True, key="reset_result",
-        help="Discard all filtering passes and start over from the originally uploaded file."
-    ):
-        orig = st.session_state["choice_original"]
-        st.session_state["choice_working"] = dict(orig)
-        st.session_state["choice_chain_count"] = 0
-        st.rerun()
+pass_no = chain_count + 1
+
 
 if not new_resp:
     st.warning(
@@ -385,6 +400,9 @@ if not new_resp:
         "This can happen with tetradic files if the stimuli you kept never "
         "appear together in the same trial -- try keeping a larger set."
     )
+    if chain_count > 0:
+        st.button("↺ Reset to original file", use_container_width=True,
+                  key="reset_result_empty", on_click=_reset_to_original)
     st.stop()
 
 buf = io.BytesIO()
@@ -394,6 +412,24 @@ with tempfile.NamedTemporaryFile(suffix=".mat", delete=False) as tmp_out:
         buf.write(f.read())
 os.unlink(tmp_out.name)
 
-out_name = uploaded.name.replace(".mat", "_subset.mat")
-st.download_button("Download subset .mat", data=buf.getvalue(),
-                   file_name=out_name, mime="application/octet-stream")
+suffix = "_subset.mat" if pass_no == 1 else f"_subset{pass_no}.mat"
+out_name = uploaded.name.replace(".mat", suffix)
+st.download_button(
+    "Download subset .mat" if pass_no == 1 else f"Download pass {pass_no} result (.mat)",
+    data=buf.getvalue(), file_name=out_name, mime="application/octet-stream")
+st.caption(f"This file has {len(new_stims)} stimuli and {len(new_resp)} {trial_word.lower()}.")
+
+st.markdown("---")
+st.markdown("**Want to narrow it down further?**")
+st.caption(
+    "\"Filter this result again\" makes the result above your new starting point, so you don't have to "
+    "re-upload. The result above is then replaced, so download it first if you need it."
+)
+chain_col, reset_col = st.columns(2)
+with chain_col:
+    st.button("🔁 Filter this result again", use_container_width=True, key="filter_again",
+              on_click=_chain_to, args=(new_resp, new_rep, new_stims, chain_count + 1))
+with reset_col:
+    if chain_count > 0:
+        st.button("↺ Reset to original file", use_container_width=True,
+                  key="reset_result", on_click=_reset_to_original)
