@@ -81,7 +81,12 @@ def coords_to_numpy(mat_path):
     for key, value in raw.items():
         m = re.match(r'^dim(\d+)$', key)
         if m:
-            coords_by_dim[int(m.group(1))] = np.atleast_2d(value)
+            arr = np.asarray(value)
+            # squeeze_me collapses a one-column dim1 to a flat vector; it is a column of
+            # coordinates (one per stimulus), not a single row
+            if arr.ndim < 2:
+                arr = arr.reshape(-1, 1)
+            coords_by_dim[int(m.group(1))] = arr
 
     if not coords_by_dim:
         raise ValueError(
@@ -94,6 +99,13 @@ def coords_to_numpy(mat_path):
             "No stimulus name field ('stim_labels' or 'stim_list') found in this file."
         )
     stim_list = [str(s).strip() for s in raw[stim_key]]
+
+    for dim, arr in coords_by_dim.items():
+        if arr.shape[0] != len(stim_list) or arr.shape[1] != dim:
+            raise ValueError(
+                f"'dim{dim}' has shape {arr.shape}, but a {dim}-dimensional file with "
+                f"{len(stim_list)} stimuli should have shape ({len(stim_list)}, {dim})."
+            )
 
     return coords_by_dim, stim_list
 
