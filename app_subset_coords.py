@@ -101,7 +101,7 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 st.markdown(
     """
     <div class="hero">
-        <h1>Subset Stimuli</h1>
+        <h1>Filter coordinate file by stimulus</h1>
         <p>Keep or remove specific stimuli from a coordinates file — works with any
         number of fitted dimensions at once.</p>
     </div>
@@ -120,7 +120,7 @@ with st.expander("New here? What does this do?", expanded=False):
         "smaller version."
     )
 
-st.sidebar.title("Subset Stimuli")
+st.sidebar.title("Filter coordinate file")
 st.sidebar.caption("Filter a coordinates file down to a chosen set of stimuli.")
 st.sidebar.markdown("---")
 

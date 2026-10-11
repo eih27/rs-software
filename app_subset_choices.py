@@ -14,8 +14,8 @@ import streamlit as st
 
 st.set_page_config(page_title="Subset Stimuli", layout="wide", initial_sidebar_state="expanded")
 
-choice_page = st.Page("pages/Choice_Subset.py", title="Triadic / Tetradic", default=True)
-ooo_page = st.Page("pages/OOO_Subset.py", title="Odd-One-Out")
+choice_page = st.Page("pages/Choice_Subset.py", title="Filter choice file (triadic / tetradic)", default=True)
+ooo_page = st.Page("pages/OOO_Subset.py", title="Filter choice file (odd-one-out)")
 
 pg = st.navigation([choice_page, ooo_page], position="top")
 pg.run()
