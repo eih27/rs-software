@@ -117,7 +117,22 @@ st.sidebar.title("Filter odd-one-out file")
 st.sidebar.caption("Filter an odd-one-out choice file down to a chosen set of stimuli.")
 st.sidebar.markdown("---")
 
-uploaded = st.sidebar.file_uploader("Odd-one-out file (.mat)", type="mat")
+ooo_uploader_n = st.session_state.get("ooo_uploader_n", 0)
+uploaded = st.sidebar.file_uploader("Odd-one-out file (.mat)", type="mat", key=f"ooo_uploader_{ooo_uploader_n}")
+
+
+def _filter_another_file():
+    """Clear the uploaded file (a new uploader key gives a fresh, empty upload box) and any saved state."""
+    st.session_state["ooo_uploader_n"] = st.session_state.get("ooo_uploader_n", 0) + 1
+    for k in []:
+        st.session_state.pop(k, None)
+
+
+if uploaded is not None:
+    st.sidebar.button("📂 Filter another file", use_container_width=True,
+                      key="filter_another_sidebar", on_click=_filter_another_file,
+                      help="Clear this file and go back to a fresh upload.")
+
 
 
 def step_badges(uploaded_done, selected_done, run_done):
@@ -317,3 +332,6 @@ os.unlink(tmp_out.name)
 out_name = uploaded.name.replace(".mat", "_subset.mat")
 st.download_button("Download subset .mat", data=buf.getvalue(),
                    file_name=out_name, mime="application/octet-stream")
+
+st.button("📂 Filter another file", key="filter_another_result", on_click=_filter_another_file,
+          help="Clear this file and go back to a fresh upload.")

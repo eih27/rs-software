@@ -42,6 +42,11 @@ def subset_stimuli(stim_list, include=None, exclude=None, regex=None,
     if regex_mode not in ("include", "exclude"):
         raise ValueError("regex_mode must be 'include' or 'exclude', got {!r}.".format(regex_mode))
 
+    if len(stim_list) == 0:
+        raise ValueError(
+            "This file's stimulus list is empty (0 names), so there is nothing to filter. "
+            "Check that the file has a 'stim_labels' (or 'stim_list') variable with the stimulus names.")
+
     name_to_index = {name: i for i, name in enumerate(stim_list)}
 
     def _resolve(items):
@@ -75,7 +80,11 @@ def subset_stimuli(stim_list, include=None, exclude=None, regex=None,
         kept_indices = [kept_indices[k] for k in order]
 
     if not kept_names:
-        raise ValueError("No stimuli left after filtering -- selection removed everything.")
+        examples = ", ".join(repr(n) for n in stim_list[:3])
+        raise ValueError(
+            f"No stimuli left after filtering -- your selection removed all {len(stim_list)} "
+            f"stimuli in this file (the names look like {examples}). "
+            "Check the pattern or the stimuli you picked.")
 
     return kept_names, kept_indices
 

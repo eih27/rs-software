@@ -119,7 +119,22 @@ st.sidebar.title("Filter choice file")
 st.sidebar.caption("Filter a choice file down to a chosen set of stimuli.")
 st.sidebar.markdown("---")
 
-uploaded = st.sidebar.file_uploader("Choice file (.mat)", type="mat")
+choice_uploader_n = st.session_state.get("choice_uploader_n", 0)
+uploaded = st.sidebar.file_uploader("Choice file (.mat)", type="mat", key=f"choice_uploader_{choice_uploader_n}")
+
+
+def _filter_another_file():
+    """Clear the uploaded file (a new uploader key gives a fresh, empty upload box) and any saved state."""
+    st.session_state["choice_uploader_n"] = st.session_state.get("choice_uploader_n", 0) + 1
+    for k in ['choice_file_id', 'choice_file_format', 'choice_original', 'choice_working', 'choice_chain_count', 'choice_result', 'choice_just_chained']:
+        st.session_state.pop(k, None)
+
+
+if uploaded is not None:
+    st.sidebar.button("📂 Filter another file", use_container_width=True,
+                      key="filter_another_sidebar", on_click=_filter_another_file,
+                      help="Clear this file and go back to a fresh upload.")
+
 
 
 def step_badges(uploaded_done, selected_done, run_done):
@@ -433,3 +448,6 @@ with reset_col:
     if chain_count > 0:
         st.button("↺ Reset to original file", use_container_width=True,
                   key="reset_result", on_click=_reset_to_original)
+
+st.button("📂 Filter another file", key="filter_another_result", on_click=_filter_another_file,
+          help="Clear this file and go back to a fresh upload.")

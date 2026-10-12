@@ -66,6 +66,14 @@ def mat_to_numpy(mat_path):
     return array, stim_list
 
 
+def _label_to_str(label):
+    """One stimulus label as a clean string, whether the .mat stored it as a plain
+    string, a one-element array (nested cell), or a row of characters."""
+    if isinstance(label, np.ndarray):
+        label = "".join(str(x) for x in label.ravel())
+    return str(label).strip()
+
+
 def coords_to_numpy(mat_path):
     """
     Load a .mat coordinates file (the output of a model fit) and return the
@@ -98,7 +106,7 @@ def coords_to_numpy(mat_path):
         raise ValueError(
             "No stimulus name field ('stim_labels' or 'stim_list') found in this file."
         )
-    stim_list = [str(s).strip() for s in raw[stim_key]]
+    stim_list = [_label_to_str(s) for s in np.atleast_1d(raw[stim_key])]
 
     for dim, arr in coords_by_dim.items():
         if arr.shape[0] != len(stim_list) or arr.shape[1] != dim:
