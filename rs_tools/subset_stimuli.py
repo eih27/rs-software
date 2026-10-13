@@ -67,7 +67,13 @@ def subset_stimuli(stim_list, include=None, exclude=None, regex=None,
     elif exclude is not None:
         keep = set(range(len(stim_list))) - _resolve(exclude)
     else:
-        pattern = re.compile(regex)
+        try:
+            pattern = re.compile(regex)
+        except re.error as e:
+            hint = ""
+            if regex.lstrip().startswith(("*", "+", "?")):
+                hint = " A leading * needs something before it -- to match names ending in m use m$, or .*m to match anything followed by m."
+            raise ValueError(f"'{regex}' isn't a valid pattern yet ({e}).{hint}") from None
         matched = {i for i, name in enumerate(stim_list) if pattern.search(name)}
         keep = matched if regex_mode == "include" else set(range(len(stim_list))) - matched
 
@@ -223,6 +229,32 @@ def subset_coords_file(stim_list, coords_by_dim, include=None, exclude=None, reg
     return new_coords_by_dim, kept_names
 
 
+def _restore_empty_structs(value):
+    """
+    scipy loads a MATLAB struct with no fields (and empty structs nested inside
+    other structs/cells) as None, which savemat cannot write back. Replace each
+    None with an empty dict, which savemat writes as the same 1x1 empty struct.
+    """
+    import numpy as np
+
+    if value is None:
+        return {}
+    if isinstance(value, np.ndarray) and value.dtype.names:
+        out = value.copy()
+        for name in value.dtype.names:
+            for idx in np.ndindex(value.shape):
+                out[name][idx] = _restore_empty_structs(value[name][idx])
+        return out
+    if isinstance(value, np.ndarray) and value.dtype == object:
+        if value.shape == (1, 1) and value[0, 0] is None:
+            return {}  # scipy's form of a 1x1 struct with no fields
+        out = np.empty(value.shape, dtype=object)
+        for idx in np.ndindex(value.shape):
+            out[idx] = _restore_empty_structs(value[idx])
+        return out
+    return value
+
+
 def save_coords_file(out_path, coords_by_dim, stim_list, extra_fields=None):
     """
     Save a coords_by_dim/stim_list pair (the format coords_to_numpy, subset_coords_file,
@@ -233,10 +265,9 @@ def save_coords_file(out_path, coords_by_dim, stim_list, extra_fields=None):
         coords_by_dim: dict {dim: array of shape (n_stimuli, dim)}
         stim_list: list of stimulus names, in the same row order as coords_by_dim
         extra_fields: optional dict of additional fields to carry over from the
-            original file (e.g. rawLLs, bestModelLL, biasEstimate). These describe
-            the ORIGINAL fit across all stimuli, not this subset, so a note is
-            added to the readme explaining that, rather than silently dropping or
-            silently passing them off as describing the subset.
+            original file (e.g. rawLLs, bestModelLL, biasEstimate, pipeline, setup).
+            They are written back unchanged. Empty MATLAB structs, which scipy loads
+            as None, are restored as empty structs so they can be written.
     """
     import numpy as np
     from scipy.io import savemat
@@ -251,15 +282,8 @@ def save_coords_file(out_path, coords_by_dim, stim_list, extra_fields=None):
     max_len = max(len(s) for s in stim_list)
     data['stim_labels'] = np.array(stim_list, dtype=f'S{max_len}')
 
-    readme_parts = ["Subset of a coordinates file, produced by subset_coords_file."]
-    if extra_fields:
-        for key, value in extra_fields.items():
-            data[key] = value
-        readme_parts.append(
-            "Note: " + ", ".join(sorted(extra_fields)) +
-            " (if present) describe the ORIGINAL fit across all stimuli, not this subset."
-        )
-    data['readme'] = " ".join(readme_parts)
+    for key, value in (extra_fields or {}).items():
+        data[key] = _restore_empty_structs(value)
 
     savemat(out_path, data)
     print(f"Saved: {out_path}  ({len(stim_list)} stimuli, dims {sorted(coords_by_dim)})")

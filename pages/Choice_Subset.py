@@ -99,7 +99,7 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 st.markdown(
     """
     <div class="hero">
-        <h1>Filter choice file by stimulus</h1>
+        <h1>Filter a choice file by stimuli</h1>
         <p>Keep or remove specific stimuli from a choice file before running analysis —
         works on both triadic and tetradic files.</p>
     </div>
@@ -115,7 +115,7 @@ with st.expander("New here? What does this do?", expanded=False):
         "remaining stimuli are renumbered from 1, with no gaps."
     )
 
-st.sidebar.title("Filter choice file")
+st.sidebar.title("Filter a choice file by stimuli")
 st.sidebar.caption("Filter a choice file down to a chosen set of stimuli.")
 st.sidebar.markdown("---")
 
@@ -183,7 +183,7 @@ if st.session_state.get("choice_file_id") != uploaded.file_id:
             'columns instead. Use the dedicated odd-one-out page instead.</p></div>',
             unsafe_allow_html=True,
         )
-        st.page_link("pages/OOO_Subset.py", label="Go to Filter choice file (odd-one-out)")
+        st.page_link("pages/OOO_Subset.py", label="Go to: Filter an odd-one-out choice file by stimuli")
         st.stop()
 
     try:

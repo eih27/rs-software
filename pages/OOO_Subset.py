@@ -95,7 +95,7 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 st.markdown(
     '''
     <div class="hero">
-        <h1>Filter odd-one-out file by stimulus</h1>
+        <h1>Filter an odd-one-out choice file by stimuli</h1>
         <p>Keep or remove specific stimuli from an odd-one-out choice file. This is
         a separate tool from the triadic/tetradic version, since odd-one-out
         trials carry three separate counts instead of one.</p>
@@ -113,7 +113,7 @@ with st.expander("New here? What does this do?", expanded=False):
         "remaining stimuli are renumbered from 1, with no gaps."
     )
 
-st.sidebar.title("Filter odd-one-out file")
+st.sidebar.title("Filter an odd-one-out choice file by stimuli")
 st.sidebar.caption("Filter an odd-one-out choice file down to a chosen set of stimuli.")
 st.sidebar.markdown("---")
 
