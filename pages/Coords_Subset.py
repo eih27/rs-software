@@ -179,7 +179,10 @@ except Exception as e:
 # Carry over any field beyond the structural ones (dimN, stim_labels/stim_list, readme) --
 # generic on purpose, so this keeps working if a future file format has different extra
 # fields than the ones this codebase currently writes (rawLLs, bestModelLL, etc.)
-raw = sio.loadmat(tmp_path)  # not squeezed, so extra fields keep their exact MATLAB shapes
+# Not squeezed, so extra fields keep their exact MATLAB shapes. mat_dtype=True reads each
+# number as the type MATLAB gives it: MATLAB stores whole-number doubles in a compact
+# integer form, and without this they would be written back as uint8/uint16.
+raw = sio.loadmat(tmp_path, mat_dtype=True)
 os.unlink(tmp_path)
 structural_keys = {k for k in raw if re.match(r"^dim\d+$", k)} | {"stim_labels", "stim_list"}
 extra_fields = {k: v for k, v in raw.items() if not k.startswith("__") and k not in structural_keys}

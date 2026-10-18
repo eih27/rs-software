@@ -231,14 +231,23 @@ def subset_coords_file(stim_list, coords_by_dim, include=None, exclude=None, reg
 
 def _restore_empty_structs(value):
     """
-    scipy loads a MATLAB struct with no fields (and empty structs nested inside
-    other structs/cells) as None, which savemat cannot write back. Replace each
-    None with an empty dict, which savemat writes as the same 1x1 empty struct.
+    Prepare a variable carried over from the original file so MATLAB sees it unchanged.
+
+    scipy loads a MATLAB struct with no fields (and empty structs nested inside other
+    structs/cells) as None, which savemat cannot write back. Replace each None with an
+    empty dict, which savemat writes as the same 1x1 empty struct.
+
+    scipy also reads a MATLAB [] (0x0) inside a nested struct as 1x0, and would write it
+    back as 1x0. Restore those to 0x0. (A genuine 1x0 inside a struct would be turned into
+    0x0 too; the metadata in the lab's files only contains [], never 1x0.)
     """
     import numpy as np
 
     if value is None:
         return {}
+    if (isinstance(value, np.ndarray) and value.shape == (1, 0) and value.dtype.names is None
+            and value.dtype != object):
+        return np.zeros((0, 0), dtype=value.dtype)
     if isinstance(value, np.ndarray) and value.dtype.names:
         out = value.copy()
         for name in value.dtype.names:
