@@ -603,5 +603,36 @@ full_tbl = {
 }
 st.dataframe(full_tbl, use_container_width=True, hide_index=True)
 
+# --- download results as files (machine-readable, for the lab's comparison tables) ---
+from rs_tools.results_export import build_record, record_bytes
+
+st.markdown("#### Download results")
+st.caption("Save this run -- settings, real and surrogate disparities, log-likelihoods and the p-value -- "
+           "as a file, so results can be collected across subjects and tasks.")
+result_record = build_record(
+    source="app.py (Surrogate MDS app)", dataset1=name1, dataset2=name2,
+    file1=file1.name if input_mode == "Upload files" else os.path.basename(path1_direct),
+    file2=file2.name if input_mode == "Upload files" else os.path.basename(path2_direct),
+    dim=dim, n_surrogates=n_surrogates,
+    max_iterations_real=max_iterations, max_iterations_surrogate=surrogate_max_iter,
+    learning_rate=learning_rate, resample_method=resample_method, warm_start=show_pooled,
+    seed_mode="pooled warm start" if show_pooled else seed_mode,
+    n_shared_stimuli=len(set(stims1) & set(stims2)), n_triads1=total_triads1, n_triads2=total_triads2,
+    real_disparity=real_disparity, real_ll1=final_ll1, real_ll2=final_ll2,
+    surrogate_disparities=surrogate_disparities,
+    surrogate_ll1=[r[0] for r in surrogate_lls], surrogate_ll2=[r[1] for r in surrogate_lls])
+st.caption(f"p-value {result_record['p_value']:.4f} is the fraction of surrogates at or above the real disparity "
+           f"({result_record['n_surrogates_ge_real']} of {n_surrogates}); the file also stores "
+           f"{result_record['p_value_plus_one']:.4f}, the estimate that is never exactly 0.")
+_file_stem = f"{name1}_vs_{name2}_{dim}d_{n_surrogates}surr_{resample_method}"
+# Streamlit 1.43+ can skip the page rerun a download click normally causes; this page stops
+# without the Run button, so a rerun would wipe the results.
+_no_rerun = {"on_click": "ignore"} if tuple(int(x) for x in st.__version__.split(".")[:2]) >= (1, 43) else {}
+_c1, _c2, _c3 = st.columns(3)
+for _col, _fmt, _mime in [(_c1, "json", "application/json"), (_c2, "mat", "application/octet-stream"),
+                          (_c3, "npz", "application/octet-stream")]:
+    _col.download_button(f"Download .{_fmt}", record_bytes(result_record, _fmt),
+                         file_name=f"{_file_stem}.{_fmt}", mime=_mime, key=f"dl_results_{_fmt}", **_no_rerun)
+
 os.unlink(path1)
 os.unlink(path2)
