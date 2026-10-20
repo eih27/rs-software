@@ -1,25 +1,23 @@
 """
-pages/Coords_Subset.py — the coordinates-file page of the Subset Stimuli app.
+subset_pages/OOO_Subset.py — the odd-one-out page of the Subset Stimuli app.
 
-This is one page of a multi-page app; app_subset_choices.py and app_subset_coords.py
-are the entry points (and top-nav routers) that Streamlit Cloud actually runs.
+This is one page of a multi-page app; app_subset_choices.py is the entry point
+(and top-nav router) that Streamlit Cloud actually runs.
 """
 
 import sys
 import os
-import re
 import io
 import tempfile
 import streamlit as st
-import scipy.io as sio
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from convert_mat_to_numpy import coords_to_numpy
-from rs_tools.subset_stimuli import subset_stimuli, subset_coords_file, save_coords_file
+from rs_tools.subset_stimuli import (
+    subset_stimuli, load_ooo_file, subset_ooo_file, save_ooo_file, validate_ooo_responses,
+)
 
-CUSTOM_CSS = """
-<style>
+CUSTOM_CSS = """<style>
 html, body { font-family: "Helvetica Neue", Inter, -apple-system, sans-serif; }
 
 .block-container { padding-top: 2.2rem; max-width: 900px; }
@@ -91,43 +89,41 @@ div.stButton > button[kind="primary"], div.stDownloadButton > button {
 div.stButton > button[kind="primary"]:hover, div.stDownloadButton > button:hover {
     background: #4834D4;
 }
-</style>
-"""
+</style>"""
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 st.markdown(
-    """
+    '''
     <div class="hero">
-        <h1>Filter a coordinate file by stimuli</h1>
-        <p>Keep or remove specific stimuli from a coordinates file — works with any
-        number of fitted dimensions at once.</p>
+        <h1>Filter an odd-one-out choice file by stimuli</h1>
+        <p>Keep or remove specific stimuli from an odd-one-out choice file. This is
+        a separate tool from the triadic/tetradic version, since odd-one-out
+        trials carry three separate counts instead of one.</p>
     </div>
-    """,
+    ''',
     unsafe_allow_html=True,
 )
 
 with st.expander("New here? What does this do?", expanded=False):
     st.markdown(
-        "Upload a coordinates file, pick which stimuli to keep or drop, and "
+        "Upload an odd-one-out choice file, pick which stimuli to keep or drop, and "
         "download a smaller version with just those stimuli.\n\n"
-        "If the file has more than one fitted dimensionality (e.g. both a 2D and "
-        "a 3D fit), all of them are filtered together, so they stay in sync. "
-        "Any other fields in the file (like fit-quality statistics) are carried "
-        "over as-is, with a note that they describe the original file, not this "
-        "smaller version."
+        "Any triplet that mentions a removed stimulus gets dropped too (all three "
+        "stimuli in a triplet have to survive for the triplet to survive), and the "
+        "remaining stimuli are renumbered from 1, with no gaps."
     )
 
-st.sidebar.title("Filter a coordinate file by stimuli")
-st.sidebar.caption("Filter a coordinates file down to a chosen set of stimuli.")
+st.sidebar.title("Filter an odd-one-out choice file by stimuli")
+st.sidebar.caption("Filter an odd-one-out choice file down to a chosen set of stimuli.")
 st.sidebar.markdown("---")
 
-coords_uploader_n = st.session_state.get("coords_uploader_n", 0)
-uploaded = st.sidebar.file_uploader("Coordinates file (.mat)", type="mat", key=f"coords_uploader_{coords_uploader_n}")
+ooo_uploader_n = st.session_state.get("ooo_uploader_n", 0)
+uploaded = st.sidebar.file_uploader("Odd-one-out file (.mat)", type="mat", key=f"ooo_uploader_{ooo_uploader_n}")
 
 
 def _filter_another_file():
     """Clear the uploaded file (a new uploader key gives a fresh, empty upload box) and any saved state."""
-    st.session_state["coords_uploader_n"] = st.session_state.get("coords_uploader_n", 0) + 1
+    st.session_state["ooo_uploader_n"] = st.session_state.get("ooo_uploader_n", 0) + 1
     for k in []:
         st.session_state.pop(k, None)
 
@@ -145,13 +141,13 @@ def step_badges(uploaded_done, selected_done, run_done):
             return "step done"
         return "step pending" if not active else "step"
     st.markdown(
-        f"""
+        f'''
         <div class="steps">
             <div class="{cls(uploaded_done, True)}"><div class="num">1</div><div class="label">Upload file</div></div>
             <div class="{cls(selected_done, uploaded_done)}"><div class="num">2</div><div class="label">Choose stimuli</div></div>
             <div class="{cls(run_done, selected_done)}"><div class="num">3</div><div class="label">Run &amp; download</div></div>
         </div>
-        """,
+        ''',
         unsafe_allow_html=True,
     )
 
@@ -160,7 +156,7 @@ if uploaded is None:
     step_badges(False, False, False)
     st.markdown(
         '<div class="card"><h3>Get started</h3>'
-        '<p class="subtitle">Upload a .mat coordinates file in the sidebar to begin.</p></div>',
+        '<p class="subtitle">Upload a .mat odd-one-out file in the sidebar to begin.</p></div>',
         unsafe_allow_html=True,
     )
     st.stop()
@@ -170,22 +166,18 @@ with tempfile.NamedTemporaryFile(suffix=".mat", delete=False) as tmp:
     tmp_path = tmp.name
 
 try:
-    coords_by_dim, stim_list = coords_to_numpy(tmp_path)
+    rows, stim_list = load_ooo_file(tmp_path)
 except Exception as e:
-    st.error(f"Could not load file: {e}\n\nMake sure this is a **coordinates** file, not a choice file.")
-    os.unlink(tmp_path)
+    st.error(f"Could not load file: {e}\n\nMake sure this is an **odd-one-out** file.")
     st.stop()
+finally:
+    os.unlink(tmp_path)
 
-# Carry over any field beyond the structural ones (dimN, stim_labels/stim_list, readme) --
-# generic on purpose, so this keeps working if a future file format has different extra
-# fields than the ones this codebase currently writes (rawLLs, bestModelLL, etc.)
-# Not squeezed, so extra fields keep their exact MATLAB shapes. mat_dtype=True reads each
-# number as the type MATLAB gives it: MATLAB stores whole-number doubles in a compact
-# integer form, and without this they would be written back as uint8/uint16.
-raw = sio.loadmat(tmp_path, mat_dtype=True)
-os.unlink(tmp_path)
-structural_keys = {k for k in raw if re.match(r"^dim\d+$", k)} | {"stim_labels", "stim_list"}
-extra_fields = {k: v for k, v in raw.items() if not k.startswith("__") and k not in structural_keys}
+try:
+    validate_ooo_responses(rows, len(stim_list))
+except ValueError as e:
+    st.error(f"This doesn't look like a valid odd-one-out file:\n\n{e}")
+    st.stop()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Selection")
@@ -209,11 +201,11 @@ elif mode == "Match a pattern (regex)":
         "Regex pattern", placeholder="e.g. ^b",
         help=(
             "Examples:\n"
-            "- `^b` — starts with b\n"
-            "- `0600$` — ends with 0600\n"
-            "- `p\\d{4}$` — ends in \"p\" + 4 digits (e.g. bp0400, cp0200) — picks out positives\n"
-            "- `m\\d{4}$` — ends in \"m\" + 4 digits (e.g. bm0400, cm0200) — picks out negatives\n"
-            "- `rand` — contains \"rand\" anywhere"
+            "- `^b` \u2014 starts with b\n"
+            "- `0600$` \u2014 ends with 0600\n"
+            "- `p\\d{4}$` \u2014 ends in \"p\" + 4 digits (e.g. bp0400, cp0200) \u2014 picks out positives\n"
+            "- `m\\d{4}$` \u2014 ends in \"m\" + 4 digits (e.g. bm0400, cm0200) \u2014 picks out negatives\n"
+            "- `rand` \u2014 contains \"rand\" anywhere"
         ),
     )
     regex_mode = st.sidebar.radio("Pattern matches should be...", ["include", "exclude"], horizontal=True)
@@ -227,20 +219,16 @@ alphabetize = st.sidebar.checkbox("Alphabetize the output stimulus list", value=
 st.sidebar.markdown("---")
 run_btn = st.sidebar.button("Run", type="primary", use_container_width=True)
 
-dims_str = ", ".join(f"{d}D" for d in sorted(coords_by_dim))
-
 st.markdown(
     f'<div class="card"><h3>Loaded file</h3>'
     f'<p class="subtitle">{uploaded.name}</p>'
     f'<div class="metric-row">'
     f'<div class="metric-box"><div class="value">{len(stim_list)}</div><div class="label">Stimuli</div></div>'
-    f'<div class="metric-box"><div class="value">{dims_str}</div><div class="label">Fitted dimensions</div></div>'
+    f'<div class="metric-box"><div class="value">{rows.shape[0]}</div><div class="label">Triplet types</div></div>'
     f'</div></div>',
     unsafe_allow_html=True,
 )
 
-# Live preview -- cheap, uses only the lightweight name-selection step, not the full
-# coords-file processing, so it can update instantly as the sidebar selection changes.
 if selection_ready:
     try:
         preview_names, _ = subset_stimuli(
@@ -284,8 +272,8 @@ if not selection_ready:
     st.stop()
 
 try:
-    new_coords, new_stims = subset_coords_file(
-        stim_list, coords_by_dim, include=include, exclude=exclude,
+    new_rows, new_stims = subset_ooo_file(
+        stim_list, rows, include=include, exclude=exclude,
         regex=regex, regex_mode=regex_mode, alphabetize=alphabetize)
 except ValueError as e:
     st.error(str(e))
@@ -294,12 +282,13 @@ except ValueError as e:
 step_badges(True, True, True)
 
 n_excluded_stim = len(stim_list) - len(new_stims)
+n_dropped_triplets = rows.shape[0] - new_rows.shape[0]
 
 pills = "".join(f'<span class="pill">{name}</span>' for name in new_stims[:24])
 more = f'<span class="pill more">+{len(new_stims) - 24} more</span>' if len(new_stims) > 24 else ""
 
 st.markdown(
-    f"""
+    f'''
     <div class="card">
         <h3>Result</h3>
         <div class="metric-row">
@@ -311,23 +300,31 @@ st.markdown(
                 <div class="value">{n_excluded_stim}</div>
                 <div class="label">Stimuli excluded</div>
             </div>
+            <div class="metric-box kept">
+                <div class="value">{new_rows.shape[0]} / {rows.shape[0]}</div>
+                <div class="label">Triplets kept</div>
+            </div>
+            <div class="metric-box excluded">
+                <div class="value">{n_dropped_triplets}</div>
+                <div class="label">Triplets excluded</div>
+            </div>
         </div>
         <div class="pill-list">{pills}{more}</div>
     </div>
-    """,
+    ''',
     unsafe_allow_html=True,
 )
 
-if extra_fields:
-    st.caption(
-        f"Carrying over {len(extra_fields)} other field(s) from the original file "
-        f"({', '.join(sorted(extra_fields))}) -- they are saved unchanged, so they "
-        "still describe the original file, not this subset."
+if new_rows.shape[0] == 0:
+    st.warning(
+        "No triplets remain after filtering, so there\'s nothing to download. "
+        "Every triplet needs all 3 of its stimuli to survive -- try keeping a larger set."
     )
+    st.stop()
 
 buf = io.BytesIO()
 with tempfile.NamedTemporaryFile(suffix=".mat", delete=False) as tmp_out:
-    save_coords_file(tmp_out.name, new_coords, new_stims, extra_fields=extra_fields)
+    save_ooo_file(tmp_out.name, new_rows, new_stims)
     with open(tmp_out.name, "rb") as f:
         buf.write(f.read())
 os.unlink(tmp_out.name)

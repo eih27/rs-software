@@ -604,11 +604,33 @@ full_tbl = {
 st.dataframe(full_tbl, use_container_width=True, hide_index=True)
 
 # --- download results as files (machine-readable, for the lab's comparison tables) ---
-from rs_tools.results_export import build_record, record_bytes
+from rs_tools.results_export import (build_record, record_bytes, bundle_zip, table_csv,
+                                     coords_csv, convergence_csv)
 
 st.markdown("#### Download results")
-st.caption("Save this run -- settings, real and surrogate disparities, log-likelihoods and the p-value -- "
-           "as a file, so results can be collected across subjects and tasks.")
+st.caption("Save this whole run as files: settings, real and surrogate disparities and log-likelihoods, the "
+           "p-value, both fitted maps (raw and aligned), the convergence curves, the surrogate table and the "
+           "histogram. \"Download everything\" packs all of it into one zip.")
+
+# the two maps on the shared stimuli, centered, with dataset 2 rotated onto dataset 1
+# (the alignment behind the disparity)
+_a1, _a2, _shared = align_to_shared_stimuli(real_coords1, stims1, real_coords2, stims2)
+_a1 = _a1 - _a1.mean(axis=0)
+_a2 = _a2 - _a2.mean(axis=0)
+_rot, _ = orthogonal_procrustes(_a1, _a2)
+_a2 = _a2 @ _rot.T
+
+
+def _curve(residuals, total_triads):
+    # residuals are (iteration, negative log-likelihood) pairs; the plots show log-likelihood per triad
+    if not residuals or not total_triads:
+        return None
+    return np.array([[it, -nll / total_triads] for it, nll in residuals], dtype=float)
+
+
+_conv1, _conv2 = _curve(residuals1, total_triads1), _curve(residuals2, total_triads2)
+_conv_pooled = _curve(pooled_residuals, total_triads_pooled) if show_pooled else None
+
 result_record = build_record(
     source="app.py (Surrogate MDS app)", dataset1=name1, dataset2=name2,
     file1=file1.name if input_mode == "Upload files" else os.path.basename(path1_direct),
@@ -620,19 +642,46 @@ result_record = build_record(
     n_shared_stimuli=len(set(stims1) & set(stims2)), n_triads1=total_triads1, n_triads2=total_triads2,
     real_disparity=real_disparity, real_ll1=final_ll1, real_ll2=final_ll2,
     surrogate_disparities=surrogate_disparities,
-    surrogate_ll1=[r[0] for r in surrogate_lls], surrogate_ll2=[r[1] for r in surrogate_lls])
+    surrogate_ll1=[r[0] for r in surrogate_lls], surrogate_ll2=[r[1] for r in surrogate_lls],
+    extras={"stim_labels1": stims1, "stim_labels2": stims2,
+            "real_coords1": real_coords1, "real_coords2": real_coords2,
+            "shared_stim_labels": _shared, "aligned_coords1": _a1, "aligned_coords2": _a2,
+            "convergence_dataset1": _conv1, "convergence_dataset2": _conv2,
+            "convergence_pooled": _conv_pooled})
 st.caption(f"p-value {result_record['p_value']:.4f} is the fraction of surrogates at or above the real disparity "
-           f"({result_record['n_surrogates_ge_real']} of {n_surrogates}); the file also stores "
+           f"({result_record['n_surrogates_ge_real']} of {n_surrogates}); the files also store "
            f"{result_record['p_value_plus_one']:.4f}, the estimate that is never exactly 0.")
+
+_surrogate_csv = table_csv(
+    ["surrogate", f"ll_per_triad_{name1}", f"ll_per_triad_{name2}", "disparity"],
+    [[i + 1, repr(float(r[0])), repr(float(r[1])), repr(float(d))]
+     for i, (r, d) in enumerate(zip(surrogate_lls, surrogate_disparities))])
+_histogram_html = fig_dist.to_html(include_plotlyjs="cdn").encode("utf-8")
+_bundle = bundle_zip(result_record, {
+    "surrogate_table.csv": _surrogate_csv,
+    "coordinates_dataset1.csv": coords_csv(stims1, real_coords1),
+    "coordinates_dataset2.csv": coords_csv(stims2, real_coords2),
+    "aligned_dataset1.csv": coords_csv(_shared, _a1),
+    "aligned_dataset2.csv": coords_csv(_shared, _a2),
+    "convergence.csv": convergence_csv({name1: _conv1, name2: _conv2, "pooled": _conv_pooled}),
+    "disparity_histogram.html": _histogram_html})
+
 _file_stem = f"{name1}_vs_{name2}_{dim}d_{n_surrogates}surr_{resample_method}"
 # Streamlit 1.43+ can skip the page rerun a download click normally causes; this page stops
 # without the Run button, so a rerun would wipe the results.
 _no_rerun = {"on_click": "ignore"} if tuple(int(x) for x in st.__version__.split(".")[:2]) >= (1, 43) else {}
-_c1, _c2, _c3 = st.columns(3)
-for _col, _fmt, _mime in [(_c1, "json", "application/json"), (_c2, "mat", "application/octet-stream"),
-                          (_c3, "npz", "application/octet-stream")]:
-    _col.download_button(f"Download .{_fmt}", record_bytes(result_record, _fmt),
-                         file_name=f"{_file_stem}.{_fmt}", mime=_mime, key=f"dl_results_{_fmt}", **_no_rerun)
+st.download_button("Download everything (.zip)", _bundle, file_name=f"{_file_stem}_all.zip",
+                   mime="application/zip", key="dl_results_all", type="primary", **_no_rerun)
+st.caption("Or one file at a time:")
+_cols = st.columns(5)
+for _col, (_label, _data, _name, _mime) in zip(_cols, [
+        ("Summary .json", record_bytes(result_record, "json"), f"{_file_stem}.json", "application/json"),
+        ("Summary .mat", record_bytes(result_record, "mat"), f"{_file_stem}.mat", "application/octet-stream"),
+        ("Summary .npz", record_bytes(result_record, "npz"), f"{_file_stem}.npz", "application/octet-stream"),
+        ("Surrogate table .csv", _surrogate_csv, f"{_file_stem}_surrogates.csv", "text/csv"),
+        ("Histogram .html", _histogram_html, f"{_file_stem}_histogram.html", "text/html")]):
+    _col.download_button(_label, _data, file_name=_name, mime=_mime,
+                         key="dl_results_" + _name.rsplit(".", 1)[-1], **_no_rerun)
 
 os.unlink(path1)
 os.unlink(path2)

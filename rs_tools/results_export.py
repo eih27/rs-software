@@ -6,6 +6,10 @@ disparity and log-likelihoods, every surrogate disparity, and the p-value. The s
 is written by the Surrogate MDS app (Download results buttons) and by the batch script
 (rs_tools/run_comparison.py), so results from either can be collected into one table.
 
+A record can also carry the fitted maps and convergence curves (see EXTRA_FIELDS), and
+bundle_zip() packs everything -- the record in all three formats, CSV tables, the plot,
+and a README -- into one zip.
+
 Formats (chosen by file extension):
     .json   readable anywhere; arrays are lists
     .mat    MATLAB / Octave; fields are variables
@@ -42,6 +46,14 @@ SCALAR_FIELDS = [
     "p_value", "p_value_plus_one",
 ]
 ARRAY_FIELDS = ["surrogate_disparities", "surrogate_ll1", "surrogate_ll2"]
+# optional extras: fitted maps (rows = stimuli, columns = dimensions), the stimulus names for
+# each, the maps after alignment on the shared stimuli, and convergence curves
+# (rows = [iteration, log-likelihood per triad])
+EXTRA_FIELDS = [
+    "stim_labels1", "stim_labels2", "real_coords1", "real_coords2",
+    "shared_stim_labels", "aligned_coords1", "aligned_coords2",
+    "convergence_dataset1", "convergence_dataset2", "convergence_pooled",
+]
 SUMMARY_COLUMNS = [
     "dataset1", "dataset2", "dim", "n_surrogates", "max_iterations_real",
     "max_iterations_surrogate", "resample_method", "real_disparity", "surrogate_mean",
@@ -73,8 +85,10 @@ def build_record(*, source, dataset1, dataset2, dim, n_surrogates, real_disparit
                  surrogate_ll1=None, surrogate_ll2=None, file1=None, file2=None,
                  max_iterations_real=None, max_iterations_surrogate=None,
                  learning_rate=None, resample_method=None, warm_start=None,
-                 seed_mode=None, n_shared_stimuli=None, n_triads1=None, n_triads2=None):
-    """Assemble one result record. Fields that do not apply may be left as None."""
+                 seed_mode=None, n_shared_stimuli=None, n_triads1=None, n_triads2=None,
+                 extras=None):
+    """Assemble one result record. Fields that do not apply may be left as None.
+    extras: optional dict with any of EXTRA_FIELDS (maps, labels, convergence curves)."""
     disparities = np.asarray(surrogate_disparities, dtype=float).ravel()
     n_ge = int(np.sum(disparities >= real_disparity))
     n = len(disparities)
@@ -103,6 +117,15 @@ def build_record(*, source, dataset1, dataset2, dim, n_surrogates, real_disparit
         "surrogate_ll1": None if surrogate_ll1 is None else np.asarray(surrogate_ll1, dtype=float).ravel(),
         "surrogate_ll2": None if surrogate_ll2 is None else np.asarray(surrogate_ll2, dtype=float).ravel(),
     }
+    for key, value in (extras or {}).items():
+        if key not in EXTRA_FIELDS:
+            raise ValueError(f"Unknown extra field {key!r}; allowed: {', '.join(EXTRA_FIELDS)}")
+        if value is None:
+            record[key] = None
+        elif key.startswith(("stim_labels", "shared_stim_labels")):
+            record[key] = np.array([str(v) for v in value])
+        else:
+            record[key] = np.asarray(value, dtype=float)
     return record
 
 
@@ -130,12 +153,73 @@ def record_bytes(record, fmt):
         np.savez(buf, **{k: np.asarray(v) for k, v in present.items()})
     elif fmt == "mat":
         from scipy.io import savemat
-        data = {k: (np.asarray(v, dtype=float).reshape(-1, 1) if k in ARRAY_FIELDS
-                    else (int(v) if isinstance(v, bool) else v))
-                for k, v in present.items()}
+        data = {}
+        for k, v in present.items():
+            if k in ARRAY_FIELDS:
+                data[k] = np.asarray(v, dtype=float).reshape(-1, 1)
+            elif isinstance(v, np.ndarray) and v.dtype.kind == "U":
+                data[k] = np.array(list(v), dtype=object).reshape(-1, 1)   # MATLAB cell array of text
+            else:
+                data[k] = int(v) if isinstance(v, bool) else v
         savemat(buf, data, do_compression=True)
     else:
         raise ValueError(f"Unknown format {fmt!r}; use json, mat or npz.")
+    return buf.getvalue()
+
+
+def table_csv(header, rows):
+    """A list of rows (lists) as CSV bytes."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return buf.getvalue().encode("utf-8")
+
+
+def coords_csv(labels, coords):
+    """A map as CSV bytes: one row per stimulus, columns stimulus, dim1, dim2, ..."""
+    coords = np.asarray(coords, dtype=float)
+    header = ["stimulus"] + [f"dim{i + 1}" for i in range(coords.shape[1])]
+    return table_csv(header, [[str(n)] + [repr(float(x)) for x in row] for n, row in zip(labels, coords)])
+
+
+def convergence_csv(curves):
+    """curves: {name: array with rows [iteration, log-likelihood per triad]} as CSV bytes."""
+    rows = [[name, int(it), repr(float(ll))] for name, arr in curves.items() if arr is not None
+            for it, ll in np.asarray(arr)]
+    return table_csv(["fit", "iteration", "log_likelihood_per_triad"], rows)
+
+
+README_TEXT = """Surrogate MDS comparison -- everything from one run
+====================================================
+
+results.json / results.mat / results.npz
+    The same record in three formats: settings, real disparity and log-likelihoods, every
+    surrogate disparity and log-likelihood, the p-value, and the fitted maps and
+    convergence curves. MATLAB: r = load('results.mat'). Python: np.load('results.npz').
+    p_value is the fraction of surrogates at or above the real disparity; p_value_plus_one
+    is (k+1)/(n+1), which is never exactly 0.
+surrogate_table.csv         one row per surrogate: log-likelihood of each dataset, disparity
+coordinates_dataset1.csv    fitted map of dataset 1 (one row per stimulus)
+coordinates_dataset2.csv    fitted map of dataset 2
+aligned_dataset1.csv        both maps restricted to the shared stimuli, centered, with
+aligned_dataset2.csv        dataset 2 rotated onto dataset 1 (the alignment behind the disparity)
+convergence.csv             log-likelihood per triad against iteration for each real fit
+disparity_histogram.html    the surrogate distribution and the real disparity (open in a browser)
+"""
+
+
+def bundle_zip(record, extra_files=None, stem="results"):
+    """Everything from one run in one zip: the record in json/mat/npz, a README, and the
+    extra files (name -> bytes) such as CSV tables and the plot."""
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("README.txt", README_TEXT)
+        for fmt in ("json", "mat", "npz"):
+            z.writestr(f"{stem}.{fmt}", record_bytes(record, fmt))
+        for name, data in (extra_files or {}).items():
+            z.writestr(name, data)
     return buf.getvalue()
 
 
@@ -152,16 +236,40 @@ def load_record(path):
     if ext == ".json":
         with open(path) as f:
             raw = json.load(f)
-        return {k: (np.array(v, dtype=float) if k in ARRAY_FIELDS and v is not None else v)
-                for k, v in raw.items()}
+        out = {}
+        for k, v in raw.items():
+            if v is not None and (k in ARRAY_FIELDS or k in EXTRA_FIELDS):
+                out[k] = np.array(v) if k.startswith(("stim_labels", "shared_stim")) else np.array(v, dtype=float)
+            else:
+                out[k] = v
+        return out
     if ext == ".npz":
         with np.load(path, allow_pickle=False) as z:
-            return {k: (z[k] if k in ARRAY_FIELDS else z[k].item()) for k in z.files}
+            return {k: (z[k] if (k in ARRAY_FIELDS or k in EXTRA_FIELDS) else z[k].item()) for k in z.files}
     if ext == ".mat":
         from scipy.io import loadmat
         raw = loadmat(path, squeeze_me=True)
-        return {k: (np.atleast_1d(v) if k in ARRAY_FIELDS else (v.item() if hasattr(v, "item") else v))
-                for k, v in raw.items() if not k.startswith("__")}
+        out = {}
+        for k, v in raw.items():
+            if k.startswith("__"):
+                continue
+            if k in ARRAY_FIELDS:
+                out[k] = np.atleast_1d(v)
+            elif k.startswith(("stim_labels", "shared_stim")):
+                out[k] = np.array([str(x).strip() for x in np.atleast_1d(v)])
+            elif k in EXTRA_FIELDS:
+                out[k] = np.asarray(v)
+            else:
+                out[k] = v.item() if hasattr(v, "item") else v
+        # squeeze_me flattens one-row / one-column tables: put them back
+        for key in ("convergence_dataset1", "convergence_dataset2", "convergence_pooled"):
+            if key in out:
+                out[key] = np.asarray(out[key]).reshape(-1, 2)
+        for key, labels in (("real_coords1", "stim_labels1"), ("real_coords2", "stim_labels2"),
+                            ("aligned_coords1", "shared_stim_labels"), ("aligned_coords2", "shared_stim_labels")):
+            if key in out and labels in out:
+                out[key] = np.asarray(out[key]).reshape(len(out[labels]), -1)
+        return out
     raise ValueError(f"Unknown file type {ext!r}; use .json, .mat or .npz.")
 
 

@@ -1,5 +1,5 @@
 """
-pages/Choice_Subset.py — the triadic/tetradic choice-file page of the Subset Stimuli app.
+subset_pages/Choice_Subset.py — the triadic/tetradic choice-file page of the Subset Stimuli app.
 
 This is one page of a multi-page app; app_subset_choices.py is the entry point
 (and top-nav router) that Streamlit Cloud actually runs.
@@ -183,7 +183,7 @@ if st.session_state.get("choice_file_id") != uploaded.file_id:
             'columns instead. Use the dedicated odd-one-out page instead.</p></div>',
             unsafe_allow_html=True,
         )
-        st.page_link("pages/OOO_Subset.py", label="Go to: Filter an odd-one-out choice file by stimuli")
+        st.page_link("subset_pages/OOO_Subset.py", label="Go to: Filter an odd-one-out choice file by stimuli")
         st.stop()
 
     try:

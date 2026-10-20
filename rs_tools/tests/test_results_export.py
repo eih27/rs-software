@@ -88,3 +88,50 @@ def test_batch_script_writes_files_and_skips_finished_runs(tmp_path):
     mtime = os.path.getmtime(paths[0])
     run_one(f1, f2, 2, "with_replacement", 3, 20, 20, 2, str(tmp_path), ["json"], verbose=False)
     assert os.path.getmtime(paths[0]) == mtime, "a finished run should be skipped, not redone"
+
+
+def _record_with_extras(n_stim=5, dim=2, n_conv=1):
+    rng = np.random.default_rng(1)
+    labels = [f"s{i}" for i in range(n_stim)]
+    return build_record(
+        source="t", dataset1="a", dataset2="b", dim=dim, n_surrogates=3, real_disparity=0.2,
+        surrogate_disparities=[0.1, 0.1, 0.3],
+        extras={"stim_labels1": labels, "stim_labels2": labels, "real_coords1": rng.normal(size=(n_stim, dim)),
+                "real_coords2": rng.normal(size=(n_stim, dim)), "shared_stim_labels": labels,
+                "aligned_coords1": rng.normal(size=(n_stim, dim)), "aligned_coords2": rng.normal(size=(n_stim, dim)),
+                "convergence_dataset1": np.column_stack([np.arange(n_conv) * 50, -rng.random(n_conv)]),
+                "convergence_dataset2": None})
+
+
+@pytest.mark.parametrize("ext", ["json", "mat", "npz"])
+@pytest.mark.parametrize("n_stim,dim,n_conv", [(5, 2, 1), (5, 1, 3), (1, 2, 1)])
+def test_maps_labels_and_convergence_round_trip(tmp_path, ext, n_stim, dim, n_conv):
+    rec = _record_with_extras(n_stim, dim, n_conv)
+    path = str(tmp_path / f"r.{ext}")
+    save_record(rec, path)
+    back = load_record(path)
+    assert list(back["stim_labels1"]) == list(rec["stim_labels1"])
+    for key in ("real_coords1", "real_coords2", "aligned_coords1", "aligned_coords2", "convergence_dataset1"):
+        assert back[key].shape == rec[key].shape, (key, back[key].shape, rec[key].shape)
+        assert np.allclose(back[key], rec[key])
+
+
+def test_unknown_extra_field_is_rejected():
+    with pytest.raises(ValueError):
+        build_record(source="t", dataset1="a", dataset2="b", dim=2, n_surrogates=1, real_disparity=0.1,
+                     surrogate_disparities=[0.1], extras={"nonsense": [1]})
+
+
+def test_bundle_zip_has_everything(tmp_path):
+    import io
+    import zipfile
+    from rs_tools.results_export import bundle_zip, coords_csv, convergence_csv
+    rec = _record_with_extras()
+    data = bundle_zip(rec, {"coordinates_dataset1.csv": coords_csv(rec["stim_labels1"], rec["real_coords1"]),
+                            "convergence.csv": convergence_csv({"a": rec["convergence_dataset1"], "pooled": None})})
+    z = zipfile.ZipFile(io.BytesIO(data))
+    assert {"README.txt", "results.json", "results.mat", "results.npz",
+            "coordinates_dataset1.csv", "convergence.csv"} <= set(z.namelist())
+    header = z.read("coordinates_dataset1.csv").decode().splitlines()[0]
+    assert header == "stimulus,dim1,dim2"
+    assert z.read("convergence.csv").decode().splitlines()[0] == "fit,iteration,log_likelihood_per_triad"
