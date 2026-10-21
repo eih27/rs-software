@@ -23,7 +23,7 @@ import scipy.io as sio
 from pathlib import Path
 
 sys.path.insert(0, '.')
-from src.rs_py.utils.util import load_choices
+from rs_tools.choice_loader import load_choices
 
 
 def mat_file_kind(mat_path):

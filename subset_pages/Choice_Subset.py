@@ -13,7 +13,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.rs_py.utils.util import load_choices
+from rs_tools.choice_loader import load_choices
 from rs_tools.subset_stimuli import (
     subset_stimuli, subset_choice_file, save_choice_file, detect_choice_format,
     validate_choice_responses,
