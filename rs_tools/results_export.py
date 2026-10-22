@@ -20,8 +20,8 @@ Collect many runs into one table:
 
 p-values: `p_value` is the fraction of surrogates with disparity >= the real disparity, as
 the app shows it. With n surrogates it can only take values k/n, so 0 means "none of the n
-surrogates reached the real value", not "impossible". `p_value_plus_one` = (k + 1) / (n + 1)
-is the conservative estimate that is never 0.
+surrogates reached the real value", not "impossible". It is reported as is, including 0: an
+estimate from the surrogates that were run, not a claim of the "true" p-value.
 """
 
 import csv
@@ -43,7 +43,7 @@ SCALAR_FIELDS = [
     "n_shared_stimuli", "n_triads1", "n_triads2",
     "real_disparity", "real_ll1", "real_ll2",
     "surrogate_mean", "surrogate_std", "n_surrogates_ge_real",
-    "p_value", "p_value_plus_one",
+    "p_value",
 ]
 ARRAY_FIELDS = ["surrogate_disparities", "surrogate_ll1", "surrogate_ll2"]
 # optional extras: fitted maps (rows = stimuli, columns = dimensions), the stimulus names for
@@ -57,7 +57,7 @@ EXTRA_FIELDS = [
 SUMMARY_COLUMNS = [
     "dataset1", "dataset2", "dim", "n_surrogates", "max_iterations_real",
     "max_iterations_surrogate", "resample_method", "real_disparity", "surrogate_mean",
-    "surrogate_std", "p_value", "p_value_plus_one", "real_ll1", "real_ll2", "source",
+    "surrogate_std", "p_value", "real_ll1", "real_ll2", "source",
     "created_utc",
 ]
 
@@ -112,7 +112,6 @@ def build_record(*, source, dataset1, dataset2, dim, n_surrogates, real_disparit
         "surrogate_std": float(disparities.std()) if n else None,
         "n_surrogates_ge_real": n_ge,
         "p_value": float(n_ge / n) if n else None,
-        "p_value_plus_one": float((n_ge + 1) / (n + 1)) if n else None,
         "surrogate_disparities": disparities,
         "surrogate_ll1": None if surrogate_ll1 is None else np.asarray(surrogate_ll1, dtype=float).ravel(),
         "surrogate_ll2": None if surrogate_ll2 is None else np.asarray(surrogate_ll2, dtype=float).ravel(),
@@ -197,8 +196,8 @@ results.json / results.mat / results.npz
     The same record in three formats: settings, real disparity and log-likelihoods, every
     surrogate disparity and log-likelihood, the p-value, and the fitted maps and
     convergence curves. MATLAB: r = load('results.mat'). Python: np.load('results.npz').
-    p_value is the fraction of surrogates at or above the real disparity; p_value_plus_one
-    is (k+1)/(n+1), which is never exactly 0.
+    p_value is the fraction of surrogates at or above the real disparity (k/n, so it can be
+    exactly 0: none of the n surrogates reached the real disparity).
 surrogate_table.csv         one row per surrogate: log-likelihood of each dataset, disparity
 coordinates_dataset1.csv    fitted map of dataset 1 (one row per stimulus)
 coordinates_dataset2.csv    fitted map of dataset 2
@@ -301,7 +300,7 @@ def main(argv=None):
     for r in rows:
         print(f"{r['file']}: {r['dataset1']} vs {r['dataset2']}  {r['dim']}D  "
               f"disparity {r['real_disparity']:.4f}  p={r['p_value']:.4f}  "
-              f"(p+1={r['p_value_plus_one']:.4f}, {r['n_surrogates']} surrogates)")
+              f"({r['n_surrogates']} surrogates)")
     if args.csv:
         print(f"Wrote {args.csv}")
     return 0

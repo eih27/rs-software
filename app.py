@@ -649,8 +649,8 @@ result_record = build_record(
             "convergence_dataset1": _conv1, "convergence_dataset2": _conv2,
             "convergence_pooled": _conv_pooled})
 st.caption(f"p-value {result_record['p_value']:.4f} is the fraction of surrogates at or above the real disparity "
-           f"({result_record['n_surrogates_ge_real']} of {n_surrogates}); the files also store "
-           f"{result_record['p_value_plus_one']:.4f}, the estimate that is never exactly 0.")
+           f"({result_record['n_surrogates_ge_real']} of {n_surrogates}). With {n_surrogates} surrogates it can only be a "
+           f"multiple of 1/{n_surrogates}; 0 means none of them reached the real disparity.")
 
 _surrogate_csv = table_csv(
     ["surrogate", f"ll_per_triad_{name1}", f"ll_per_triad_{name2}", "disparity"],

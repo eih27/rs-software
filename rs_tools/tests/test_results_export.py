@@ -31,7 +31,7 @@ def record():
 def test_p_values(record):
     assert record["n_surrogates_ge_real"] == 0
     assert record["p_value"] == 0.0
-    assert record["p_value_plus_one"] == pytest.approx(1 / 21)
+    assert "p_value_plus_one" not in record
 
 
 def test_p_value_counts_ties_and_larger():
@@ -39,7 +39,6 @@ def test_p_value_counts_ties_and_larger():
                        real_disparity=0.5, surrogate_disparities=[0.1, 0.5, 0.6, 0.2])
     assert rec["n_surrogates_ge_real"] == 2
     assert rec["p_value"] == 0.5
-    assert rec["p_value_plus_one"] == pytest.approx(3 / 5)
 
 
 @pytest.mark.parametrize("ext", ["json", "mat", "npz"])
